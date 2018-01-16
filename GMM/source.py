@@ -14,7 +14,7 @@ class Dataset(object):
     def __init__(self):
         self.map_file = ''
         self.train_labeled_file = ''
-        self.train_unlabel_file = ''
+        self.train_unlabeled_file = ''
         self.test_file = ''
         self.problem_type = ''
 
@@ -39,7 +39,7 @@ class Dataset(object):
         else:
             self.map_file, self.train_label_file, self.train_unlabeled_file, self.test_file = file_name[1:]
             # Load unlabeled data
-            train_unlabel_load = np.genfromtxt(self.train_unlabel_file, delimiter=',')
+            train_unlabel_load = np.genfromtxt(self.train_unlabeled_file, delimiter=',')
             self.train_xu = np.mat(train_unlabel_load.T[:-1].T)
 
         train_label_load = np.genfromtxt(self.train_label_file, delimiter=',')
@@ -69,14 +69,14 @@ class GmmSupervised(object):
 
         # evaluate
         # note: use matrix here, not list for same data type with data.test_y
-        self.predicted_label = np.mat(np.zeros((1,se lf.data.instance_test_number)))
+        self.predicted_label = np.mat(np.zeros((1,self.data.instance_test_number)))
         self.accuracy = .0
 
     def MultivariateGaussian(self, x, mu, sigma):
         p = len(x[0])
         fraction = np.power(2*np.pi,p/2) * np.power(np.linalg.det(sigma), 0.5)
         # notice: put correct parenthesis here
-        e_power = float(-0.5*(x-mu) * (np.linalg.inv(sigma)) * ((x-mu).T))
+        e_power = float(-0.5*(x-mu) * (np.linalg.pinv(sigma)) * ((x-mu).T))
         return np.power(np.e, e_power)/fraction
 
     def train(self):
@@ -92,11 +92,11 @@ class GmmSupervised(object):
             self.pi.append(l_j[0,i]/l)
 
             # mean
-            class_sum = np.mat(np.zeros((1, self.data.feature_number)))
+            instance_sum = np.mat(np.zeros((1, self.data.feature_number)))
             for k in range(l):
                 if self.data.train_yl[0, k] == i:
-                    class_sum += self.data.train_xl[k]
-            self.mu.append(class_sum/l_j[0,i])
+                    instance_sum += self.data.train_xl[k]
+            self.mu.append(instance_sum/l_j[0,i])
 
             # covariance
             cov_sum = np.mat(np.zeros((self.data.feature_number,self.data.feature_number)))
@@ -141,34 +141,75 @@ class GmmSemisupervised(object):
         p = len(x[0])
         fraction = np.power(2*np.pi,p/2) * np.power(np.linalg.det(sigma), 0.5)
         # notice: put correct parenthesis here
-        e_power = float(-0.5*(x-mu) * (np.linalg.inv(sigma)) * ((x-mu).T))
+        e_power = float(-0.5*(x-mu) * (np.linalg.pinv(sigma)) * ((x-mu).T))
         return np.power(np.e, e_power)/fraction
 
     def train(self):
-        # calcute Li
+        # init parameter
+        # using parameter estimated from Gmm supervised
+        gmm_all_label = GmmSupervised(self.data)
+        gmm_all_label.train()
+        self.pi = gmm_all_label.pi
+        self.mu = gmm_all_label.mu
+        self.cov = gmm_all_label.cov
+
+        epsilon = 1e-3
+        loopcount = 0
+        diff = 1
         l = self.data.instance_label_number
-        l_j = np.mat(np.zeros((1,self.data.class_number)))
-        for i in range(l):
-            l_j[0,int(self.data.train_yl[0,i])] += 1
+        u = self.data.instance_unlabel_number
 
-        # estimate parameters
-        for i in range(self.data.class_number):
-            # class proportion
-            self.pi.append(l_j[0,i]/l)
+        # EM algorithm
+        # dara D = (xl, yl) union (xu)
+        while diff < epsilon:
+            # E step
+            pi_old = self.pi
+            mu_old = self.mu
+            cov_old = self.cov
 
-            # mean
-            class_sum = np.mat(np.zeros((1, self.data.feature_number)))
-            for k in range(l):
-                if self.data.train_yl[0, k] == i:
-                    class_sum += self.data.train_xl[k]
-            self.mu.append(class_sum/l_j[0,i])
+            # gamma estimate
+            gamma = np.mat(np.zeros((l+u,self.data.class_number)))
+            # labeled data
+            for i in range(self.data.instance_label_number):
+                for j in range(self.data.class_number):
+                    if self.data.train_yl[i] == j:
+                        gamma[i,j] = 1
+            # unlabeled data
+            for i in range(u):
+                denominator = 0.
+                for j in range(self.data.class_number):
+                    gamma[i+l,j] = pi_old[j]*self.MultivariateGaussian(self.data.train_xu[i],mu_old[j],cov_old[j])
+                    denominator += gamma[i+l,j] # px = sum over C of P(x|y_c)
+                for j in range(self.data.class_number):
+                    gamma[i+l,j] /= denominator
 
-            # covariance
-            cov_sum = np.mat(np.zeros((self.data.feature_number,self.data.feature_number)))
-            for k in range(l):
-                if self.data.train_yl[0,k] == i:
-                    cov_sum += ((self.data.train_xl[k]-self.mu[i]).T)*(self.data.train_xl[k]-self.mu[i])
-            self.cov.append(cov_sum / l_j[0,i])
+            # M step
+            # calcute Li
+            l_j = np.sum(gamma, axis=0)
+            for i in range(self.data.class_number):
+                # class proportion
+                self.pi.append(l_j[0,i]/(l+u))
+
+                # mean
+                instance_sum = np.mat(np.zeros((1, self.data.feature_number)))
+                for k in range(l):
+                    instance_sum += gamma[k, i]*self.data.train_xl[k]
+                for k in range(u):
+                    instance_sum += gamma[l+k, i]*self.data.train_xu[k]
+                self.mu.append(instance_sum/l_j[0,i])
+
+                # covariance
+                cov_sum = np.mat(np.zeros((self.data.feature_number,self.data.feature_number)))
+                for k in range(l):
+                    cov_sum += gamma[k, i]*((self.data.train_xl[k]-self.mu[i]).T)*(self.data.train_xl[k]-self.mu[i])
+                for k in range(u):
+                    cov_sum += gamma[l+k, i]*((self.data.train_xu[k]-self.mu[i]).T)*(self.data.train_xu[k]-self.mu[i])
+                self.cov.append(cov_sum / l_j[0,i])
+
+            # check convegence of mu
+            diff = 0
+            for i in range(self.data.class_number):
+                diff += ((self.mu[0,i] - mu_old[i])*(self.mu[0,i] - mu_old[i]).T)[0,0]
 
     def test(self):
         # estimated value of x for each class
@@ -210,12 +251,13 @@ def main():
     # deploy model
     if dataset.problem_type == '1':
         gmm_model = GmmSupervised(dataset)
-    else:
+    elif dataset.problem_type == '2':
         gmm_model = GmmSemisupervised(dataset)
 
     # learning
     gmm_model.train()
     gmm_model.test()
+
     # except:
     #     e = sys.exc_info()[0]
     #     print(e)
@@ -224,4 +266,6 @@ def main():
 if __name__ == '__main__':
     main()
     # iris data
-    # 1 data/iris.map.csv data/iris.train.csv data/iris.test.csv
+    # 1 data/iris.map.csv data/iris.train.label.csv data/iris.test.csv
+
+    # 2 data/iris.map.csv data/iris.train.label.csv data/iris.train.unlabel.csv data/iris.test.csv
