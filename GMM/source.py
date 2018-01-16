@@ -40,7 +40,7 @@ class Dataset(object):
             self.map_file, self.train_label_file, self.train_unlabeled_file, self.test_file = file_name[1:]
             # Load unlabeled data
             train_unlabel_load = np.genfromtxt(self.train_unlabeled_file, delimiter=',')
-            self.train_xu = np.mat(train_unlabel_load.T[:-1].T)
+            self.train_xu = np.mat(train_unlabel_load)
 
         train_label_load = np.genfromtxt(self.train_label_file, delimiter=',')
         self.train_xl = np.mat(train_label_load.T[:-1].T)
