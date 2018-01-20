@@ -50,8 +50,8 @@ class Dataset(object):
         self.test_x = np.mat(test_load.T[:-1].T)
         self.test_y = np.mat(test_load.T[-1])
 
-        map_load = np.genfromtxt(self.map_file, delimiter=',')
-        self.class_number = int(map_load[-1])
+        map_load = np.genfromtxt(self.map_file, dtype='str', delimiter=',')
+        self.class_number = len(map_load)
 
         self.instance_label_number, self.feature_number = np.shape(self.train_xl)
         self.instance_unlabel_number = np.shape(self.train_xu)[0]
@@ -117,8 +117,6 @@ class GmmSupervised(object):
         # calculate evaluation index
         self.accuracy = metrics.accuracy_score(np.squeeze(np.asarray(self.data.test_y)),
                                                           np.squeeze(np.asarray(self.predicted_label)))
-                        # :( too long to convert back from single matrix to array
-        print(self.accuracy)
 
 
 class GmmSemisupervised(object):
@@ -224,23 +222,20 @@ class GmmSemisupervised(object):
         self.accuracy = metrics.accuracy_score(np.squeeze(np.asarray(self.data.test_y)),
                                                           np.squeeze(np.asarray(self.predicted_label)))
                         # :( too long to convert back from single matrix to array
-        print(self.accuracy)
-
 
 # main
 def main():
     # Input format
     # <problem type> <map file> <train data, labeled> <train data, unlabeled> <test data>
     #
-    ## <problem type>
-    ## 1: supervised, 2: semi-supervised
+    #   <problem type> 1: supervised, 2: semi-supervised
+
     # try:
     # default
-    data_file_name = []
 
+    data_file_name = []
     if (len(sys.argv) > 1):
-        # todo utilize terminal/cmd
-        print('')
+        data_file_name = sys.argv[1:]
     else:
         data_file_name = input("command: ").split()
 
@@ -257,15 +252,16 @@ def main():
     # learning
     gmm_model.train()
     gmm_model.test()
+    print('Accuracy: ', gmm_model.accuracy)
 
     # except:
-    #     e = sys.exc_info()[0]
-    #     print(e)
+    #     e = sys.exc_info()
+    #     print(e[0], e[1])
 
 
 if __name__ == '__main__':
     main()
-    # iris data
+    #
     # 1 data/iris.map.csv data/iris.train.label.csv data/iris.test.csv
 
     # 2 data/iris.map.csv data/iris.train.label.csv data/iris.train.unlabel.csv data/iris.test.csv
