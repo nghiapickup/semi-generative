@@ -261,7 +261,18 @@ def main():
 
 if __name__ == '__main__':
     main()
-    #
-    # 1 data/iris.map.csv data/iris.train.label.csv data/iris.test.csv
+    # supervised
 
-    # 2 data/iris.map.csv data/iris.train.label.csv data/iris.train.unlabel.csv data/iris.test.csv
+    # 1 data/3-5i/iris.map.csv data/3-5i/iris.train.label.csv data/3-5i/iris.test.csv
+
+    # 1 data/5/news.map.csv data/5/news.train.label.csv data/5/news.test.csv
+
+    # 1 data/3-5a/abalone.map.csv data/3-5a/abalone.train.label.csv data/3-5a/abalone.test.csv
+
+    # semi-supervised
+
+    # 2 data/3-5i/iris.map.csv data/3-5i/iris.train.label.csv data/3-5i/iris.train.unlabel.csv data/3-5i/iris.test.csv
+
+    # 2 data/5/news.map.csv data/5/news.train.label.csv data/5/news.train.unlabel.csv data/5/news.test.csv
+
+    # 2 data/3-5a/abalone.map.csv data/3-5a/abalone.train.label.csv data/3-5a/abalone.train.unlabel.csv data/3-5a/abalone.test.csv
