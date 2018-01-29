@@ -24,6 +24,7 @@ class Dataset(object):
         self.train_xu = np.empty((0))
         self.test_x = np.empty((0))
         self.test_y = np.empty((0))
+        self.class_name = []
 
         self.class_number = 0
         self.feature_number = 0
@@ -52,10 +53,27 @@ class Dataset(object):
 
         map_load = np.genfromtxt(self.map_file, dtype='str', delimiter=',')
         self.class_number = len(map_load)
+        self.class_name = map_load
 
         self.instance_label_number, self.feature_number = np.shape(self.train_xl)
         self.instance_unlabel_number = np.shape(self.train_xu)[0]
         self.instance_test_number = np.shape(self.test_x)[0]
+
+
+class Evaluation(object):
+    __doc__ = 'Result evaluation'
+
+    def __init__(self, label, target, prediction):
+        # calculate evaluation index
+        self.label = label
+        self.accuracy = metrics.accuracy_score(target, prediction)
+        self.report = metrics.classification_report(target, prediction, target_names=label)
+
+    def export_report(self, fname):
+        with open(fname, 'w') as f:
+            f.write(self.report + '\n')
+            f.writelines('Acc: ' + str(self.accuracy))
+
 
 class GmmSupervised(object):
     __doc__ = 'Deploy GMM model for fully labeled data D=(X,Y) with c classes'
@@ -70,7 +88,6 @@ class GmmSupervised(object):
         # evaluate
         # note: use matrix here, not list for same data type with data.test_y
         self.predicted_label = np.mat(np.zeros((1,self.data.instance_test_number)))
-        self.accuracy = .0
 
     def MultivariateGaussian(self, x, mu, sigma):
         p = len(x[0])
@@ -114,10 +131,6 @@ class GmmSupervised(object):
                                       self.MultivariateGaussian(self.data.test_x[i],self.mu[j],self.cov[j])
             self.predicted_label[0,i] = np.argmax(estimate_value[i])
 
-        # calculate evaluation index
-        self.accuracy = metrics.accuracy_score(np.squeeze(np.asarray(self.data.test_y)),
-                                                          np.squeeze(np.asarray(self.predicted_label)))
-
 
 class GmmSemisupervised(object):
     __doc__ = 'Deploy GMM model for labeled and unlabeled data D=(Dl,Du) with c classes'
@@ -130,10 +143,11 @@ class GmmSemisupervised(object):
         self.mu = []
         self.cov = []
 
+        self.loopcount = 0
+
         # evaluate
         # note: use matrix here, not list for same data type with data.test_y
         self.predicted_label = np.mat(np.zeros((1,self.data.instance_test_number)))
-        self.accuracy = .0
 
     def MultivariateGaussian(self, x, mu, sigma):
         p = len(x[0])
@@ -152,25 +166,29 @@ class GmmSemisupervised(object):
         self.cov = gmm_all_label.cov
 
         epsilon = 1e-3
-        loopcount = 0
         diff = 1
         l = self.data.instance_label_number
         u = self.data.instance_unlabel_number
 
         # EM algorithm
         # dara D = (xl, yl) union (xu)
-        while diff < epsilon:
+        while diff > epsilon:
+            self.loopcount+=1
+
             # E step
             pi_old = self.pi
             mu_old = self.mu
             cov_old = self.cov
+            self.pi = []
+            self.mu = []
+            self.cov = []
 
             # gamma estimate
             gamma = np.mat(np.zeros((l+u,self.data.class_number)))
             # labeled data
             for i in range(self.data.instance_label_number):
                 for j in range(self.data.class_number):
-                    if self.data.train_yl[i] == j:
+                    if self.data.train_yl[0,i] == j:
                         gamma[i,j] = 1
             # unlabeled data
             for i in range(u):
@@ -207,7 +225,9 @@ class GmmSemisupervised(object):
             # check convegence of mu
             diff = 0
             for i in range(self.data.class_number):
-                diff += ((self.mu[0,i] - mu_old[i])*(self.mu[0,i] - mu_old[i]).T)[0,0]
+                diff += ((self.mu[i] - mu_old[i])*(self.mu[i] - mu_old[i]).T)[0]
+
+        print(self.loopcount)
 
     def test(self):
         # estimated value of x for each class
@@ -218,10 +238,10 @@ class GmmSemisupervised(object):
                                       self.MultivariateGaussian(self.data.test_x[i],self.mu[j],self.cov[j])
             self.predicted_label[0,i] = np.argmax(estimate_value[i])
 
-        # calculate evaluation index
-        self.accuracy = metrics.accuracy_score(np.squeeze(np.asarray(self.data.test_y)),
-                                                          np.squeeze(np.asarray(self.predicted_label)))
-                        # :( too long to convert back from single matrix to array
+        # # calculate evaluation index
+        # self.accuracy = metrics.accuracy_score(np.squeeze(np.asarray(self.data.test_y)),
+        #                                                   np.squeeze(np.asarray(self.predicted_label)))
+        #                 # :( too long to convert back from single matrix to array
 
 # main
 def main():
@@ -252,7 +272,11 @@ def main():
     # learning
     gmm_model.train()
     gmm_model.test()
-    print('Accuracy: ', gmm_model.accuracy)
+
+    e = Evaluation(gmm_model.data.class_name,
+                   np.squeeze(np.asarray(gmm_model.data.test_y)),
+                   np.squeeze(np.asarray(gmm_model.predicted_label)))
+    e.export_report('report')
 
     # except:
     #     e = sys.exc_info()
