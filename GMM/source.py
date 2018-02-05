@@ -5,6 +5,8 @@
 
 import sys
 import numpy as np
+from scipy import stats
+from sklearn import model_selection
 from sklearn import metrics
 
 
@@ -22,6 +24,7 @@ class Dataset(object):
         self.train_xl = np.empty((0))
         self.train_yl = np.empty((0))
         self.train_xu = np.empty((0))
+        self.train_yu = np.empty((0)) # so ridiculous :P
         self.test_x = np.empty((0))
         self.test_y = np.empty((0))
         self.class_name = []
@@ -32,7 +35,7 @@ class Dataset(object):
         self.instance_unlabel_number = 0
         self.instance_test_number = 0
 
-    def loadCSV(self, file_name):
+    def load_from_CSV(self, file_name):
         self.problem_type = file_name[0]
 
         if self.problem_type == '1':
@@ -41,7 +44,8 @@ class Dataset(object):
             self.map_file, self.train_label_file, self.train_unlabeled_file, self.test_file = file_name[1:]
             # Load unlabeled data
             train_unlabel_load = np.genfromtxt(self.train_unlabeled_file, delimiter=',')
-            self.train_xu = np.mat(train_unlabel_load)
+            self.train_xu = np.mat(train_unlabel_load.T[:-1].T)
+            self.train_yu = np.mat(train_unlabel_load.T[-1])
 
         train_label_load = np.genfromtxt(self.train_label_file, delimiter=',')
         self.train_xl = np.mat(train_label_load.T[:-1].T)
@@ -59,21 +63,66 @@ class Dataset(object):
         self.instance_unlabel_number = np.shape(self.train_xu)[0]
         self.instance_test_number = np.shape(self.test_x)[0]
 
+    def data_from_scaling(self, size):
+        # Split labeled and unlabeled data by scaling size[labeled, unlabeled]
 
-class Evaluation(object):
-    __doc__ = 'Result evaluation'
+        splited_data = Dataset()
 
-    def __init__(self, label, target, prediction):
-        # calculate evaluation index
-        self.label = label
-        self.accuracy = metrics.accuracy_score(target, prediction)
-        self.report = metrics.classification_report(target, prediction, target_names=label)
+        # splitting data, guarantee that number of samples per class are nearly equal
 
-    def export_report(self, fname):
-        with open(fname, 'w') as f:
-            f.write(self.report + '\n')
-            f.writelines('Acc: ' + str(self.accuracy))
+        # labeled data slpiting
+        if size[0] == 1:
+            splited_data.train_xl = self.train_xl[:]
+            splited_data.train_yl = self.train_yl[:]
+        else:
+            sss1 = model_selection.StratifiedShuffleSplit(n_splits=1, test_size=size[0], random_state=0)
+            # notice: set random_state is a constant to make sure that the next scaling is the expand of last data set
+            for data_indecices, labeled_indices in sss1.split(self.train_xl, self.train_yl.T):
+                splited_data.train_xl = self.train_xl[labeled_indices]
+                splited_data.train_yl = self.train_yl[0,labeled_indices]
 
+        # unlabeled data splitting
+        if size[1] == 1:
+            splited_data.train_xu = self.train_xu
+        else:
+            sss2 = model_selection.StratifiedShuffleSplit(n_splits=1, test_size=size[1], random_state=0)
+            for data_indecices, unlabeled_indices in sss2.split(self.train_xu, self.train_yu.T):
+                splited_data.train_xu = self.train_xu[unlabeled_indices]
+
+        # update parameters
+        splited_data.problem_type = self.problem_type
+        splited_data.test_x = self.test_x
+        splited_data.test_y = self.test_y
+        splited_data.class_name = self.class_name
+        splited_data.class_number = self.class_number
+        splited_data.feature_number = self.feature_number
+        splited_data.instance_label_number = len(splited_data.train_xl)
+        splited_data.instance_unlabel_number = len(splited_data.train_xu)
+        splited_data.instance_test_number = self.instance_test_number
+
+        return splited_data
+
+    def data_from_indices_cv(self, train, test):
+        # extract data from indices list for cross validation
+        # notice here: The test is extracted from train data, not test data of dataset
+        splited_data = Dataset()
+        splited_data.train_xl = self.train_xl[train]
+        splited_data.train_yl = self.train_yl[0,train]
+        splited_data.train_xu = self.train_xu[:]
+        splited_data.train_yu = self.train_yu[:]
+        # notice
+        splited_data.test_x = self.train_xl[test]
+        splited_data.test_y = self.train_yl[0,test]
+
+        splited_data.problem_type = self.problem_type
+        splited_data.class_name = self.class_name
+        splited_data.class_number = self.class_number
+        splited_data.feature_number = self.feature_number
+        splited_data.instance_label_number = len(train)
+        splited_data.instance_unlabel_number = self.instance_unlabel_number
+        splited_data.instance_test_number = len(test)
+
+        return splited_data
 
 class GmmSupervised(object):
     __doc__ = 'Deploy GMM model for fully labeled data D=(X,Y) with c classes'
@@ -91,7 +140,7 @@ class GmmSupervised(object):
 
     def MultivariateGaussian(self, x, mu, sigma):
         p = len(x[0])
-        fraction = np.power(2*np.pi,p/2) * np.power(np.linalg.det(sigma), 0.5)
+        fraction = np.power(2*np.pi,p/2.) * np.power(np.linalg.det(sigma), 0.5)
         # notice: put correct parenthesis here
         e_power = float(-0.5*(x-mu) * (np.linalg.pinv(sigma)) * ((x-mu).T))
         return np.power(np.e, e_power)/fraction
@@ -128,13 +177,14 @@ class GmmSupervised(object):
         for i in range(self.data.instance_test_number):
             for j in range(self.data.class_number):
                 estimate_value[i,j] = self.pi[j] * \
-                                      self.MultivariateGaussian(self.data.test_x[i],self.mu[j],self.cov[j])
+                                      stats.multivariate_normal.pdf(self.data.test_x[i],
+                                                                    mean=self.mu[j][0],
+                                                                    cov=self.cov[j], allow_singular=True)
             self.predicted_label[0,i] = np.argmax(estimate_value[i])
 
 
 class GmmSemisupervised(object):
     __doc__ = 'Deploy GMM model for labeled and unlabeled data D=(Dl,Du) with c classes'
-
 
     def __init__(self, dataset):
         self.data = dataset
@@ -151,7 +201,7 @@ class GmmSemisupervised(object):
 
     def MultivariateGaussian(self, x, mu, sigma):
         p = len(x[0])
-        fraction = np.power(2*np.pi,p/2) * np.power(np.linalg.det(sigma), 0.5)
+        fraction = np.power(2*np.pi,p/2.) * np.power(np.linalg.det(sigma), 0.5)
         # notice: put correct parenthesis here
         e_power = float(-0.5*(x-mu) * (np.linalg.pinv(sigma)) * ((x-mu).T))
         return np.power(np.e, e_power)/fraction
@@ -194,7 +244,9 @@ class GmmSemisupervised(object):
             for i in range(u):
                 denominator = 0.
                 for j in range(self.data.class_number):
-                    gamma[i+l,j] = pi_old[j]*self.MultivariateGaussian(self.data.train_xu[i],mu_old[j],cov_old[j])
+                    gamma[i+l,j] = pi_old[j] * stats.multivariate_normal.pdf(self.data.train_xu[i],
+                                                                             mean=np.squeeze(np.asarray(mu_old[j])),
+                                                                             cov=cov_old[j], allow_singular=True)
                     denominator += gamma[i+l,j] # px = sum over C of P(x|y_c)
                 for j in range(self.data.class_number):
                     gamma[i+l,j] /= denominator
@@ -234,14 +286,99 @@ class GmmSemisupervised(object):
         estimate_value = np.mat(np.zeros((self.data.instance_test_number, self.data.class_number)))
         for i in range(self.data.instance_test_number):
             for j in range(self.data.class_number):
+                ###
+                print('MU  ', self.mu[j])
+                print('COV  ', self.cov[j])
+                ###
+                ###
                 estimate_value[i,j] = self.pi[j] * \
-                                      self.MultivariateGaussian(self.data.test_x[i],self.mu[j],self.cov[j])
+                                      stats.multivariate_normal.pdf(self.data.test_x[i],
+                                                                    mean=self.mu[j][0],
+                                                                    cov=self.cov[j],
+                                                                    allow_singular=True)
             self.predicted_label[0,i] = np.argmax(estimate_value[i])
 
-        # # calculate evaluation index
-        # self.accuracy = metrics.accuracy_score(np.squeeze(np.asarray(self.data.test_y)),
-        #                                                   np.squeeze(np.asarray(self.predicted_label)))
-        #                 # :( too long to convert back from single matrix to array
+class Evaluation(object):
+    __doc__ = 'Result evaluation'
+
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def leave_one_out_cv(self, data, data_model):
+        # leave one out cross validation
+        # this only
+
+        kf = model_selection.KFold(n_splits=data.instance_label_number)
+        pi_cv = None
+        mu_cv = None
+        cov_cv = None
+        for train, test in kf.split(data.train_xl):
+            # estimate parameters
+            model = data_model(data.data_from_indices_cv(train, test))
+            model.train()
+            # pi
+            if pi_cv is None:
+                pi_cv = model.pi
+            else:
+                pi_cv = np.sum([pi_cv, model.pi], axis=0)
+            # mu:
+            if mu_cv is None:
+                mu_cv = model.mu
+            else:
+                mu_cv = np.sum([mu_cv, model.mu], axis=0)
+            # cov
+            if cov_cv is None:
+                cov_cv = model.cov
+            else:
+                cov_cv = np.sum([cov_cv, model.cov], axis=0)
+
+        pi_cv = np.divide(pi_cv, float(data.instance_label_number))
+        mu_cv = np.divide(mu_cv, float(data.instance_label_number))
+        cov_cv = np.divide(cov_cv, float(data.instance_label_number))
+
+        # test with only labeled data
+        model = data_model(data)
+        model.pi = pi_cv
+        model.mu = mu_cv
+        model.cov = cov_cv
+
+        model.test()
+        return model
+
+    def report_export(self, model, fname, mode=1):
+        label = model.data.class_name
+        target = np.squeeze(np.asarray(model.data.test_y))
+        prediction = np.squeeze(np.asarray(model.predicted_label))
+
+        # calculate evaluation index
+        accuracy = metrics.accuracy_score(target, prediction)
+        report = metrics.classification_report(target, prediction, target_names=label)
+
+        # export report
+        with open(fname, 'w') as f:
+            f.write(report)
+            f.writelines('\n#labeled: ' + str(model.data.instance_label_number))
+            if(mode == 2):
+                f.writelines('\n#unlabeled: ' + str(model.data.instance_unlabel_number))
+            f.writelines('\nAcc: ' + str(accuracy))
+
+    def abalone_test(self):
+        label_scaling = (0.3, 0.5, 0.7, 1.0)
+        unlabel_scaling = (0.3, 0.5, 0.7, 1.0)
+        for i in label_scaling:
+            scaled_data = Dataset()
+            for j in unlabel_scaling:
+                # scale data first
+                scaled_data = self.dataset.data_from_scaling([i, j])
+                # semi-supervised
+                gmm_model = self.leave_one_out_cv(scaled_data, GmmSemisupervised)
+                report_file_name = str(i) + '_' + str(j) + '-report'
+                self.report_export(gmm_model, report_file_name, 2)
+
+            # supervised
+            gmm_model = self.leave_one_out_cv(scaled_data, GmmSupervised)
+            report_file_name = str(i) + '-report'
+            self.report_export(gmm_model, report_file_name)
 
 # main
 def main():
@@ -253,7 +390,6 @@ def main():
     # try:
     # default
 
-    data_file_name = []
     if (len(sys.argv) > 1):
         data_file_name = sys.argv[1:]
     else:
@@ -261,22 +397,12 @@ def main():
 
     # Extract data
     dataset = Dataset()
-    dataset.loadCSV(data_file_name)
+    dataset.load_from_CSV(data_file_name)
 
-    # deploy model
-    if dataset.problem_type == '1':
-        gmm_model = GmmSupervised(dataset)
-    elif dataset.problem_type == '2':
-        gmm_model = GmmSemisupervised(dataset)
+    e = Evaluation(dataset)
+    e.abalone_test()
 
-    # learning
-    gmm_model.train()
-    gmm_model.test()
-
-    e = Evaluation(gmm_model.data.class_name,
-                   np.squeeze(np.asarray(gmm_model.data.test_y)),
-                   np.squeeze(np.asarray(gmm_model.predicted_label)))
-    e.export_report('report')
+    print('Done')
 
     # except:
     #     e = sys.exc_info()
