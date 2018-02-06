@@ -1,7 +1,9 @@
 # MLE for Gaussian Mixture model (GMM)
 # supervised and semi-supervised
 #
-# @author: nghianh | Yamada-lab
+# @nghia n h | Yamada-lab
+##
+# This is a mess, my priority is estimating my work first
 
 import sys
 import numpy as np
@@ -186,12 +188,13 @@ class GmmSupervised(object):
 class GmmSemisupervised(object):
     __doc__ = 'Deploy GMM model for labeled and unlabeled data D=(Dl,Du) with c classes'
 
-    def __init__(self, dataset):
+    def __init__(self, dataset, theta_zero=None):
         self.data = dataset
         # model parameter
         self.pi = []
         self.mu = []
         self.cov = []
+        self.theta_zero = theta_zero
 
         self.loopcount = 0
 
@@ -209,11 +212,18 @@ class GmmSemisupervised(object):
     def train(self):
         # init parameter
         # using parameter estimated from Gmm supervised
-        gmm_all_label = GmmSupervised(self.data)
-        gmm_all_label.train()
-        self.pi = gmm_all_label.pi
-        self.mu = gmm_all_label.mu
-        self.cov = gmm_all_label.cov
+        # or theta_zero[pi, mu, cov]
+
+        if self.theta_zero is not None:
+            self.pi = self.theta_zero[0]
+            self.mu = self.theta_zero[1]
+            self.cov = self.theta_zero[2]
+        else:
+            gmm_all_label = GmmSupervised(self.data)
+            gmm_all_label.train()
+            self.pi = gmm_all_label.pi
+            self.mu = gmm_all_label.mu
+            self.cov = gmm_all_label.cov
 
         epsilon = 1e-3
         diff = 1
@@ -279,7 +289,7 @@ class GmmSemisupervised(object):
             for i in range(self.data.class_number):
                 diff += ((self.mu[i] - mu_old[i])*(self.mu[i] - mu_old[i]).T)[0]
 
-        print(self.loopcount)
+        print('EM loops count: ',self.loopcount)
 
     def test(self):
         # estimated value of x for each class
@@ -304,9 +314,9 @@ class Evaluation(object):
     def __init__(self, dataset):
         self.dataset = dataset
 
-    def leave_one_out_cv(self, data, data_model):
+    def leave_one_out_cv(self, data, data_model, theta_zero=None):
         # leave one out cross validation
-        # this only
+        # the returned paras are average value
 
         kf = model_selection.KFold(n_splits=data.instance_label_number)
         pi_cv = None
@@ -314,7 +324,10 @@ class Evaluation(object):
         cov_cv = None
         for train, test in kf.split(data.train_xl):
             # estimate parameters
-            model = data_model(data.data_from_indices_cv(train, test))
+            if theta_zero is not None:
+                model = data_model(data.data_from_indices_cv(train, test), theta_zero)
+            else:
+                model = data_model(data.data_from_indices_cv(train, test))
             model.train()
             # pi
             if pi_cv is None:
@@ -367,18 +380,23 @@ class Evaluation(object):
         unlabel_scaling = (0.3, 0.5, 0.7, 1.0)
         for i in label_scaling:
             scaled_data = Dataset()
-            for j in unlabel_scaling:
-                # scale data first
-                scaled_data = self.dataset.data_from_scaling([i, j])
-                # semi-supervised
-                gmm_model = self.leave_one_out_cv(scaled_data, GmmSemisupervised)
-                report_file_name = str(i) + '_' + str(j) + '-report'
-                self.report_export(gmm_model, report_file_name, 2)
 
             # supervised
-            gmm_model = self.leave_one_out_cv(scaled_data, GmmSupervised)
+            # temporary scale first with labeled data to init theta_zero
+            scaled_data = self.dataset.data_from_scaling([i, i])
+            print('Supervised - data scale ',i)
+            gmm_sv_model = self.leave_one_out_cv(scaled_data, GmmSupervised)
             report_file_name = str(i) + '-report'
-            self.report_export(gmm_model, report_file_name)
+            self.report_export(gmm_sv_model, report_file_name)
+
+            for j in unlabel_scaling:
+                scaled_data = self.dataset.data_from_scaling([i, j])
+                print('Semi-supervised - data scale ', i,'-',j)
+                # semi-supervised
+                gmm_ss_model = self.leave_one_out_cv(scaled_data, GmmSemisupervised,
+                                                  [gmm_sv_model.pi, gmm_sv_model.mu, gmm_sv_model.cov])
+                report_file_name = str(i) + '_' + str(j) + '-report'
+                self.report_export(gmm_ss_model, report_file_name, 2)
 
 # main
 def main():
