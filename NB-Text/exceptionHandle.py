@@ -16,14 +16,27 @@ class BaseExceptionHandle(Exception):
         print('File "' + str(fname) + '", line ' + str(self.exc_tb.tb_lineno) + '", ' + str(self.exc_obj))
 
 class DataSizeConstraint(BaseExceptionHandle):
-    "This Error will be raise when Unlabeled data size was violated"""
+    """This Error will be raised when Unlabeled data size was violated"""
 
     def __init__(self, message):
         super(DataSizeConstraint, self).__init__()
 
 
 class DataTypeConstraint(BaseExceptionHandle):
-    "This Error will be raise when input data type was violated"""
+    """This Error will be raised when input data type was violated"""
 
     def __init__(self, message):
         super(DataTypeConstraint, self).__init__()
+
+class MismatchLengthComponentList(BaseExceptionHandle):
+    """"This Error will be raised when length of component list is different with class number"""
+
+    def __init__(self, message):
+        super(MismatchLengthComponentList, self).__init__()
+
+
+class ComponentCountIsList(BaseExceptionHandle):
+    """"This Error will be raised when component_count is not a list"""
+
+    def __init__(self, message):
+        super(ComponentCountIsList, self).__init__()
