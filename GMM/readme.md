@@ -1,14 +1,5 @@
 # semi-supervised learning with GMM model
 
-I implemented GMM model for semi-supervised using Python and numpy.
-There are 2 algorithms there: 
-
-- GMM all labeled using derivative solution
-- GMM for labeled and unlabeled data using EM algorithm.
-
-Data format could be found here: [Data preprocessing](https://github.com/nghiapickup/Data_for_Semisupervised.git)
-
-
 ## Class desciption
 
 ### < Dataset >
@@ -38,5 +29,3 @@ The modele is initialized with a < Dataset > instance
 Evaluation models
 - with cross validation
 - export report
-
-### <  >

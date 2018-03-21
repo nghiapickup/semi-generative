@@ -1,15 +1,15 @@
-# Generative model
+# Generative model for Semi-supervised learning
 
 ## /GMM
-suprevised
-- Gaussian Mixture model (GMM), generative solution
+supervised
+- Gaussian Mixture model (GMM), derivative solution
 
 semi-supervised
 - GMM, EM algorithm
 
-### /NB-Text
-suprevised
-- Multinomial mixture model (MMM) for text, generative solution
+### /MMM
+supervised
+- Multinomial mixture model (MMM) for text, derivative solution
 
 semi-supervised
 - MMM for text, EM algorithm

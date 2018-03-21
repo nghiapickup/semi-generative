@@ -130,9 +130,11 @@ class EvaluationSummary(object):
 
 def main():
     # abalone data
-    folder_list = ['0','1','2']
-    report_list = ['0.3-report', '0.5-report']
-    e = EvaluationSummary('data/abalone.map.csv', folder_list, report_list)
+    folder_list = ['w/report0','w/report1','w/report2', 'w/report4', 'w/report5']
+    report_list = ['0.5_0.5-report', '0.5_0.7-report', '0.5_1.0-report', '0.5-report',
+                   '0.7_0.5-report', '0.7_0.7-report', '0.7_1.0-report', '0.7-report',
+                   '1.0_0.5-report', '1.0_0.7-report', '1.0_1.0-report', '1.0-report']
+    e = EvaluationSummary('w/abalone.map', folder_list, report_list)
     e.summarize()
 
 
