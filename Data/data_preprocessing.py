@@ -39,7 +39,7 @@ class Preprocessing(object):
         # output
         self.news_output_map = '20news-bydate/final/news.map.csv'
         self.news_output_train_data = ['20news-bydate/final/news.train.label.csv',
-                                       '20news-bydate/final/news.train.unlabel.csv']
+                                       '20news-bydate/final/news.train.unlabeled.csv']
         self.news_output_test = '20news-bydate/final/news.test.csv'
 
         # Abalone data
@@ -48,7 +48,7 @@ class Preprocessing(object):
         self.abalone_map_file = 'abalone/abalone.map'
         # output
         self.abalone_output_map = 'abalone.map.csv'
-        self.abalone_output_train = ['abalone.train.label.csv', 'abalone.train.unlabel.csv']
+        self.abalone_output_train = ['abalone.train.label.csv', 'abalone.train.unlabeled.csv']
         self.abalone_output_test = 'abalone.test.csv'
 
     def IrisData(self, args):
@@ -232,15 +232,15 @@ class Preprocessing(object):
 
 
 class Preprocessing2(object):
-    __doc__ = 'New data pre-processing. This only splits data in half train-test'
+    __doc__ = 'New data pre-processing. This only splits data in train-test'
 
-    def __init__(self, test_size=None):
+    def __init__(self, test_size=0.3):
         # common attribute
-        self.test_size = (test_size, 0.3)[test_size is None]
         self.reuters_stop_word = 'reuters_wos.txt'
+        self.test_size = test_size
 
         # 20 news data
-        self.infor_log = '20news-bydate/final/infor.txt'
+        self.info_log = '20news-bydate/final/info.txt'
         # # input
         # self.news_vocabulary_file = '20news-bydate/vocabulary.txt'
         # self.news_map_file = '20news-bydate/data.map'
@@ -252,6 +252,7 @@ class Preprocessing2(object):
         # self.news_output_map = '20news-bydate/final/news.map.csv'
         # self.news_output_train = '20news-bydate/final/news.train.csv'
         # self.news_output_test = '20news-bydate/final/news.test.csv'
+
         #  DEMO
         # input
         self.news_vocabulary_file = '20news-bydate/demo/vocabulary.txt'
@@ -268,16 +269,16 @@ class Preprocessing2(object):
     def data_extract(self, map_data, train_data, test_data):
         """
         extract data to files
-        :param output:
-        :param train:
-        :param test:
+        :param map_data:
+        :param train_data:
+        :param test_data:
         :return:
         """
         np.savetxt(self.news_output_train, train_data[:], fmt="%s", delimiter=',')
         np.savetxt(self.news_output_test, test_data[:], fmt="%s", delimiter=',')
         np.savetxt(self.news_output_map, np.mat(map_data)[0], fmt="%s", delimiter=',')
 
-        with open(self.infor_log, 'w') as f:
+        with open(self.info_log, 'w') as f:
             f.write('train number ' + str(np.shape(train_data)[0]) + '\n')
             f.write('test number ' + str(np.shape(test_data)[0]) + '\n')
             f.write('feature number ' + str(np.shape(train_data)[1]) + '\n')

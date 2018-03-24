@@ -37,6 +37,12 @@ class DataTypeConstraint(BaseExceptionHandle):
     def __init__(self, message):
         super(DataTypeConstraint, self).__init__()
 
+class DataInputMismatchLength(BaseExceptionHandle):
+    """This Error will be raised when input data lengths required the same"""
+
+    def __init__(self, message):
+        super(DataInputMismatchLength, self).__init__()
+
 # COMPONENT exception
 
 class MismatchLengthComponentList(BaseExceptionHandle):
