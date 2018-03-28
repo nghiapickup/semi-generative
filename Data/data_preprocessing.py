@@ -5,14 +5,16 @@
 #
 # @author: nghianh | Yamada lab
 
+import os
 import sys
+import collections
+import exceptionHandle as SelfException
 import numpy as np
 from sklearn import model_selection
-import os
 
 
-class Preprocessing(object):
-    __doc__ = 'Data preprocessing'
+class PreprocessingSample(object):
+    __doc__ = 'Data preprocessing or Iris and Abalone data'
 
     def __init__(self):
         # constant
@@ -27,20 +29,6 @@ class Preprocessing(object):
         self.iris_output_map = 'Iris/final/iris.map.csv'
         self.iris_output_train = ['Iris/final/iris.train.label.csv', 'Iris/final/iris.train.unlabel.csv']
         self.iris_output_test = 'Iris/final/iris.test.csv'
-
-        # 20 news data
-        # input
-        self.news_vocabulary_file = '20news-bydate/vocabulary.txt'
-        self.news_map_file = '20news-bydate/data.map'
-        self.news_train_data = '20news-bydate/train.data'
-        self.news_train_label = '20news-bydate/train.label'
-        self.news_test_data = '20news-bydate/test.data'
-        self.news_test_label = '20news-bydate/test.label'
-        # output
-        self.news_output_map = '20news-bydate/final/news.map.csv'
-        self.news_output_train_data = ['20news-bydate/final/news.train.label.csv',
-                                       '20news-bydate/final/news.train.unlabeled.csv']
-        self.news_output_test = '20news-bydate/final/news.test.csv'
 
         # Abalone data
         # input
@@ -90,88 +78,6 @@ class Preprocessing(object):
 
         # map file generate
         np.savetxt(self.iris_output_map, np.mat(map_load)[0], fmt="%s", delimiter=',')
-
-    def News20Data(self, args):
-        """
-        Basic pre-processing for News20 data using bag of words representation
-        (words count vector)
-        :param args: argument list
-        """
-        if (len(args) > 1):
-            self.test_size = float(args[1])
-        if (len(args) > 2):
-            self.train_unlabeled_size = float(args[2])
-
-        # read data
-        map_load = np.loadtxt(self.news_map_file, dtype='str', delimiter=',')
-        data_train_load = np.loadtxt(self.news_train_data, dtype='str')
-        data_train_label_load = np.loadtxt(self.news_train_label, dtype='str')
-        data_test_load = np.loadtxt(self.news_test_data, dtype='str')
-        data_test_label_load = np.loadtxt(self.news_test_label, dtype='str')
-
-        vocabulary_load = np.loadtxt(self.news_vocabulary_file, dtype='str')
-        features_number = len(vocabulary_load)
-
-        # re-index class to number 0, 1, ..., c
-        index_map = {}
-        for i in range(len(map_load)):
-            index_map[map_load[i]] = i
-
-        for i, d in enumerate(data_train_label_load):
-            data_train_label_load[i] = index_map.get(d)
-
-        for i, d in enumerate(data_test_label_load):
-            data_test_label_load[i] = index_map.get(d)
-
-        # train data generate
-        train_data_number = len(data_train_label_load)
-        train_data = np.mat(np.zeros((train_data_number, features_number + 1), dtype=np.uint8)) # data frame
-
-        #vector bag of words
-        # tup ~ (doc_id,word_id,count) ; doc_id and word_id numbering from 1
-        for i, tup in enumerate(data_train_load):
-            if len(tup) != 3:
-                print('Train file: line ',i,' error')
-            train_data[int(tup[0]) - 1, int(tup[1]) - 1] = tup[2]
-
-        for i in range(train_data_number):
-            train_data[i, -1] = data_train_label_load[i]
-
-        ###
-        #print(train_data)
-        ###
-        if self.train_unlabeled_size == 0:
-            np.savetxt(self.news_output_train_data[0], train_data, fmt="%s", delimiter=',') # train all
-        else:
-            # split train data into 2 parts (label, unlabel), nearly same proportion
-            sss1 = model_selection.StratifiedShuffleSplit(n_splits=1, test_size=self.train_unlabeled_size, random_state=0)
-            for label_indices, unlabel_indices in sss1.split(train_data, data_train_label_load):
-                np.savetxt(self.news_output_train_data[0], train_data[label_indices], fmt="%s", delimiter=',')
-                np.savetxt(self.news_output_train_data[1],
-                           train_data[unlabel_indices], fmt="%s", delimiter=',')  # remove label
-
-        # test data generate
-        test_data_number = len(data_test_label_load)
-        test_data = np.mat(np.zeros((test_data_number, features_number + 1), dtype=np.uint8))  # data frame
-
-        # vector bag of words
-        # tup ~ (doc_id,word_id,count) ; doc_id and word_id numbering from 1
-        for i, tup in enumerate(data_test_load):
-            if len(tup) != 3:
-                print('Test file: line ', i, ' error')
-            test_data[int(tup[0]) - 1, int(tup[1]) - 1] = tup[2]
-
-        for i in range(test_data_number):
-            test_data[i, -1] = data_test_label_load[i]
-
-        ###
-        #print('\n',test_data)
-        ###
-
-        np.savetxt(self.news_output_test, test_data[:], fmt="%s", delimiter=',')
-
-        # map file generate
-        np.savetxt(self.news_output_map, np.mat(map_load)[0], fmt="%s", delimiter=',')
 
     def AbaloneData(self, args, split_number=1):
         # Only extract data class from class 5 to 15
@@ -231,42 +137,30 @@ class Preprocessing(object):
             split_count += 1
 
 
-class Preprocessing2(object):
-    __doc__ = 'New data pre-processing. This only splits data in train-test'
+file_location_list = collections.namedtuple('file_location_list', 'vocabulary_file, map_input, '
+                                                                  'train_input, train_label_input, '
+                                                                  'test_input, test_label_input, '
+                                                                  'map_output, train_output, test_output, log_output')
 
-    def __init__(self, test_size=0.3):
+class Preprocessing20News(object):
+    __doc__ = '20News data pre-processing.'
+
+    reuters_stop_word_file = 'reuters_wos.txt'
+    mi_word_rank_file = '20news-bydate/final/mi_word_rank.txt'
+    required_parameter = 1
+
+    def __init__(self):
         # common attribute
-        self.reuters_stop_word = 'reuters_wos.txt'
-        self.test_size = test_size
+        self.file_list = file_location_list('20news-bydate/vocabulary.txt', '20news-bydate/data.map',
+                                       '20news-bydate/train.data', '20news-bydate/train.label',
+                                       '20news-bydate/test.data', '20news-bydate/test.label',
+                                       '20news-bydate/final/news.map.csv', '20news-bydate/final/news.train.csv',
+                                       '20news-bydate/final/news.test.csv', '20news-bydate/final/data_info.txt')
+        self.loaded_map_data = np.empty(0)
+        self.loaded_train_data = np.empty(0)
+        self.loaded_test_data = np.empty(0)
 
-        # 20 news data
-        self.info_log = '20news-bydate/final/info.txt'
-        # # input
-        # self.news_vocabulary_file = '20news-bydate/vocabulary.txt'
-        # self.news_map_file = '20news-bydate/data.map'
-        # self.news_train_data = '20news-bydate/train.data'
-        # self.news_train_label = '20news-bydate/train.label'
-        # self.news_test_data = '20news-bydate/test.data'
-        # self.news_test_label = '20news-bydate/test.label'
-        # # output
-        # self.news_output_map = '20news-bydate/final/news.map.csv'
-        # self.news_output_train = '20news-bydate/final/news.train.csv'
-        # self.news_output_test = '20news-bydate/final/news.test.csv'
-
-        #  DEMO
-        # input
-        self.news_vocabulary_file = '20news-bydate/demo/vocabulary.txt'
-        self.news_map_file = '20news-bydate/demo/data.map'
-        self.news_train_data = '20news-bydate/demo/train.data'
-        self.news_train_label = '20news-bydate/demo/train.label'
-        self.news_test_data = '20news-bydate/demo/test.data'
-        self.news_test_label = '20news-bydate/demo/test.label'
-        # output
-        self.news_output_map = '20news-bydate/demo/final/news.map.csv'
-        self.news_output_train = '20news-bydate/demo/final/news.train.csv'
-        self.news_output_test = '20news-bydate/demo/final/news.test.csv'
-
-    def data_extract(self, map_data, train_data, test_data):
+    def data_csv_export(self, map_data, train_data, test_data):
         """
         extract data to files
         :param map_data:
@@ -274,40 +168,39 @@ class Preprocessing2(object):
         :param test_data:
         :return:
         """
-        np.savetxt(self.news_output_train, train_data[:], fmt="%s", delimiter=',')
-        np.savetxt(self.news_output_test, test_data[:], fmt="%s", delimiter=',')
-        np.savetxt(self.news_output_map, np.mat(map_data)[0], fmt="%s", delimiter=',')
+        np.savetxt(self.file_list.train_output, train_data[:], fmt="%s", delimiter=',')
+        np.savetxt(self.file_list.test_output, test_data[:], fmt="%s", delimiter=',')
+        np.savetxt(self.file_list.map_output, np.mat(map_data)[0], fmt="%s", delimiter=',')
 
-        with open(self.info_log, 'w') as f:
+        with open(self.file_list.log_output, 'w') as f:
             f.write('train number ' + str(np.shape(train_data)[0]) + '\n')
             f.write('test number ' + str(np.shape(test_data)[0]) + '\n')
             f.write('feature number ' + str(np.shape(train_data)[1]) + '\n')
 
-    def news_data_basic_process(self, scale_length=7, extract_to_file=True):
+    def news_data_basic_process(self, scale_length=-1, extract_to_file=False):
         """
         Tokenize 20news data, only stemming, remove stop words and one time occurrence words.
         the data is used here is by-date and was splitted in train-test as .6-.4
-        length of scaling for all document default is 7 because max word count is ~7000
-        :param scale_length: default length of scaling for data, default is 7
-        :param extract_to_file: flag to raise extract processed data to files, default is true
+        :param scale_length: default length of scaling for data, default is -1: no scale
+        :param extract_to_file: bool, flag to raise extract processed data to files, default is true
         """
         # read data
-        map_load = np.loadtxt(self.news_map_file, dtype='str', delimiter=',')
-        train_load = np.loadtxt(self.news_train_data, dtype='int')
-        train_label_load = np.loadtxt(self.news_train_label, dtype='str')
-        test_load = np.loadtxt(self.news_test_data, dtype='int')
-        test_label_load = np.loadtxt(self.news_test_label, dtype='str')
-        vocabulary_load = np.loadtxt(self.news_vocabulary_file, dtype='str')
-        stop_word_load = np.loadtxt(self.reuters_stop_word, dtype='str')
+        map_load = np.loadtxt(self.file_list.map_input, dtype='str', delimiter=',')
+        train_load = np.loadtxt(self.file_list.train_input, dtype='int')
+        train_label_load = np.loadtxt(self.file_list.train_label_input, dtype='str')
+        test_load = np.loadtxt(self.file_list.test_input, dtype='int')
+        test_label_load = np.loadtxt(self.file_list.test_label_input, dtype='str')
+        vocabulary_load = np.loadtxt(self.file_list.vocabulary_file, dtype='str')
+        stop_word_load = np.loadtxt(self.reuters_stop_word_file, dtype='str')
 
         # re-index class to number 0, 1, ..., c
         index_map = {}
         for i in range(len(map_load)):
             index_map[map_load[i]] = i
-        for id, val in enumerate(train_label_load):
-            train_label_load[id] = index_map.get(val)
-        for id, val in enumerate(test_label_load):
-            test_label_load[id] = index_map.get(val)
+        for index, val in enumerate(train_label_load):
+            train_label_load[index] = index_map.get(val)
+        for index, val in enumerate(test_label_load):
+            test_label_load[index] = index_map.get(val)
 
         # data farm
         temp_feature_number = len(vocabulary_load)
@@ -352,42 +245,188 @@ class Preprocessing2(object):
         # x = [id for id, val in enumerate(np.sum(train_data.T[:-1].T, axis=1)) if val == 0]
 
         # scaling data with fix length
-        train_data = (train_data.T / train_data.sum(axis=1)).T
-        test_data = (test_data.T * scale_length / test_data.sum(axis=1)).T
+        if scale_length > 0:
+            train_data = (train_data.T / train_data.sum(axis=1)).T
+            test_data = (test_data.T * scale_length / test_data.sum(axis=1)).T
 
         # extract to files
         if extract_to_file:
-            self.data_extract(map_load, train_data, test_data)
+            self.data_csv_export(map_load, train_data, test_data)
+
+        self.loaded_map_data = map_load
+        self.loaded_train_data = train_data
+        self.loaded_test_data = test_data
+
+    def mutual_information_export(self):
+        """
+        Compute Average Multual Information of words and rank by word id in vocabulary file.
+        This only calculates the MI based on training file.
+        * NOTICE:
+        - The file formats as each for id per line
+        - The order is descending. Word has larger average MI will be printed first
+        - The id using here is counted from 0 (difference with raw train, test file)
+        - [CAUTION] When using this list, do not mess the id.
+        :return:
+        """
+
+        data_load = np.loadtxt(self.file_list.train_input, dtype='int')
+        data_label_load = np.loadtxt(self.file_list.train_label_input, dtype='int')
+        vocabulary_count = len(np.loadtxt(self.file_list.vocabulary_file, dtype='str'))
+        class_number = len(np.loadtxt(self.file_list.map_input,delimiter=','))
+        train_number = len(data_label_load)
+
+        word_conditional_class_pr = np.zeros((class_number, vocabulary_count))
+
+        # Notice that word and data id in raw data file counting form 1
+        for (data_id, word_id, word_count) in data_load:
+            word_conditional_class_pr[data_label_load[data_id-1]-1][word_id-1] += 1
+        class_pr = np.zeros(class_number)
+        class_unique, class_count = np.unique(data_label_load, return_counts=True)
+        class_unique[:] -= 1
+        class_pr[class_unique] = class_count
+        word_pr = word_conditional_class_pr.sum(axis=0)
+
+        class_pr = np.divide(class_pr, train_number)
+        word_pr = np.divide(word_pr, train_number)
+        word_conditional_class_pr = np.divide(word_conditional_class_pr, train_number)
+        word_mi_rank = np.zeros(vocabulary_count)
+
+        for w in range(vocabulary_count):
+            for c in range(class_number):
+                # check if class does not have any instance
+                # check if word does not have any instance, p(c,w) also = 0
+                # or word occurs in any class
+                # or there is no w in class c
+                if class_pr[c] != 0 and word_pr[w] != 0 and word_pr[w] != 1 and word_conditional_class_pr[c, w] != 0:
+                    word_mi_rank[w] += word_conditional_class_pr[c, w] * \
+                                    np.log2(word_conditional_class_pr[c, w] / (class_pr[c] * word_pr[w]))
+                    word_mi_rank[w] += (1 - word_conditional_class_pr[c, w]) * \
+                                    np.log2((1 - word_conditional_class_pr[c, w]) / (class_pr[c] * (1 - word_pr[w])))
+
+        # export to file
+        with open(self.mi_word_rank_file, 'w') as f:
+            np.savetxt(f, word_mi_rank.argsort()[::-1][:vocabulary_count], fmt="%s")
+
+        # for test case
+        return (class_pr, word_pr, word_conditional_class_pr, word_mi_rank)
+
+    def news_data_mi_selection_process(self, selected_word_number=300, scale_length=-1, extract_to_file=False):
+        """
+        Tokenize 20news data, only stemming, and choosing top selected_word_number with highest mutual information score.
+        the data is used here is by-date and was splitted in train-test as .6-.4
+        :param selected_word_number: number of features selected
+        :param scale_length: default length of scaling for data, default is -1: no scale
+        :param extract_to_file: bool, flag to raise extract processed data to files, default is true
+        """
+        # read data
+        map_load = np.loadtxt(self.file_list.map_input, dtype='str', delimiter=',')
+        train_load = np.loadtxt(self.file_list.train_input, dtype='int')
+        train_label_load = np.loadtxt(self.file_list.train_label_input, dtype='str')
+        test_load = np.loadtxt(self.file_list.test_input, dtype='int')
+        test_label_load = np.loadtxt(self.file_list.test_label_input, dtype='str')
+        vocabulary_load = np.loadtxt(self.file_list.vocabulary_file, dtype='str')
+        mi_rank_list_load = np.loadtxt(self.mi_word_rank_file, dtype='int')
+
+        # re-index class to number 0, 1, ..., c
+        index_map = {}
+        for i in range(len(map_load)):
+            index_map[map_load[i]] = i
+        for index, val in enumerate(train_label_load):
+            train_label_load[index] = index_map.get(val)
+        for index, val in enumerate(test_label_load):
+            test_label_load[index] = index_map.get(val)
+
+        # data farm
+        temp_feature_number = len(vocabulary_load)
+        train_number = len(train_label_load)
+        train_data = np.zeros((train_number, temp_feature_number + 1))
+        test_number = len(test_label_load)
+        test_data = np.zeros((test_number, temp_feature_number + 1))
+
+        # data generate
+        # vector bag of words
+        # tup ~ (doc_id,word_id,count) ; doc_id and word_id numbering from 1
+        try:
+            # train
+            for i, tup in enumerate(train_load):
+                if len(tup) != 3:
+                    raise IOError('Train file: line ', i, ' error')
+                train_data[int(tup[0]) - 1, int(tup[1]) - 1] = tup[2]
+            # label assign
+            train_data[:, -1] = train_label_load[:]
+
+            # test
+            for i, tup in enumerate(test_load):
+                if len(tup) != 3:
+                    raise IOError('Test file: line ', i, ' error')
+                test_data[int(tup[0]) - 1, int(tup[1]) - 1] = tup[2]
+            test_data[:, -1] = test_label_load[:]
+        except BaseException:
+            raise
+
+        # only pick data in mi rank list
+        # TODO: exception when selected_word_number > vocabulary size
+        pick_id = mi_rank_list_load[:selected_word_number]
+        train_data = train_data[pick_id]
+        test_data = test_data[pick_id]
+
+        # scaling data with fix length
+        if scale_length > 0:
+            train_data = (train_data.T / train_data.sum(axis=1)).T
+            test_data = (test_data.T * scale_length / test_data.sum(axis=1)).T
+
+        # extract to files
+        if extract_to_file:
+            self.data_csv_export(map_load, train_data, test_data)
+
+        self.loaded_map_data = map_load
+        self.loaded_train_data = train_data
+        self.loaded_test_data = test_data
 
 def main():
-    # try:
-    #     terminal = sys.argv
-    #     data = Preprocessing()
-    #
-    #     # command list
-    #     terminal_command = {
-    #         "iris": data.IrisData,
-    #         "20news": data.News20Data,
-    #         "abalone": data.AbaloneData
-    #     }
-    #
-    #     if len(terminal) > 1:
-    #         # terminal extract
-    #         func = terminal_command.get(terminal[1], 'Data set is not found!')
-    #         if not isinstance(func, str):
-    #             func((terminal[1:]))
-    #             print('Done!')
-    #         else:
-    #             print(func)
-    # except:
-    #     e = sys.exc_info()
-    #     print(e[0], e[1])
+    try:
+        # # input function name and args
+        # if len(sys.argv) > 1:
+        #     cmd = sys.argv[1:]
+        # else:
+        #     cmd = input("command: ").split()
 
-    # debug
-    data = Preprocessing2()
-    data.news_data_basic_process(extract_to_file=False)
+        # FIXME temp cmd
+        # news_data_basic_process(scale_length=7, extract_to_file=True)
+        # cmd = 'news_data_basic_process 7 False'.split()
 
-    print('Done!')
+        # cmd = ['mutual_information_export']
+
+        # news_data_mi_selection_process(self, selected_word_number=300, scale_length=-1, extract_to_file=False)
+        cmd = 'news_data_mi_selection_process 400 7 extract_to_file=True'.split()
+
+        list_accepted_function = 'news_data_basic_process mutual_information_export ' \
+                                 'news_data_mi_selection_process'.split()
+
+        if len(cmd) < Preprocessing20News.required_parameter:
+            raise SelfException.MismatchInputArgumentList('Preprocessing20News requires at least ' +
+                                                          str(Preprocessing20News.required_parameter) + ' arguments.')
+        if cmd[0] not in list_accepted_function:
+            raise SelfException.NonExitstingFunction('Preprocessing20News called function does not exist .')
+
+        data = Preprocessing20News()
+        function_called = getattr(data, cmd[0])
+
+        if cmd[0] == 'news_data_basic_process':
+            function_called(scale_length=int(cmd[1]), extract_to_file=bool(cmd[2]))
+        elif cmd[0] == 'mutual_information_export':
+            function_called()
+        elif cmd[0] == 'news_data_mi_selection_process':
+            function_called(selected_word_number=int(cmd[1]), scale_length=int(cmd[2]), extract_to_file=bool(cmd[3]))
+
+        print('Done!')
+
+    except SelfException.NonExitstingFunction as e:
+        e.recall_traceback(sys.exc_info())
+        raise
+
+    except BaseException:
+        raise
 
 if __name__ == '__main__':
     main()

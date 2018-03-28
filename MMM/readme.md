@@ -23,12 +23,13 @@ Map file only includes list of origin name for each class
                 --> call training model
                 - The interface for each model includes train and test method in basic.
 
-#### [process 2] Reading directly from raw data
+### [process 2] Reading directly from raw data
 The only difference with the last process is it does not call Dataset.
 Despite that, the process should be inherited data_preprocessing script in Data project.
 
 The only reason is that it saves more time when extract the raw (compressed) data file 
 than reading large features vector file.
+
 ## Class desciption
 
 ### < Dataset >

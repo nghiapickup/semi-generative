@@ -15,6 +15,22 @@ class BaseExceptionHandle(Exception):
         traceback.print_stack()
         print('File "' + str(fname) + '", line ' + str(self.exc_tb.tb_lineno) + ', ' + str(self.exc_obj))
 
+# GENERAL FUNCTION EXCEPTION
+
+class NonExitstingFunction(BaseExceptionHandle):
+    """This Error will be raised when call an non existing function"""
+
+    def __init__(self, message):
+        super(NonExitstingFunction, self).__init__()
+
+
+class MismatchInputArgumentList(BaseExceptionHandle):
+    """This Error will be raised when input arguments do not match required """
+
+    def __init__(self, message):
+        super(MismatchInputArgumentList, self).__init__()
+
+
 # DATA INPUT EXCEPTION
 
 class DatasetInitArgsNumberViolated(BaseExceptionHandle):
@@ -42,6 +58,7 @@ class DataInputMismatchLength(BaseExceptionHandle):
 
     def __init__(self, message):
         super(DataInputMismatchLength, self).__init__()
+
 
 # COMPONENT exception
 

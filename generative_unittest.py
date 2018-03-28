@@ -3,15 +3,89 @@
 #
 # @nghia n h | Yamada-lab
 
-import numpy as np
-import unittest
-import copy
-import MMM.NBText as nb
-import scipy.stats
-import exceptionHandle as SelfException
-from sklearn import metrics
 import sys
+import copy
+import unittest
+import numpy as np
+import scipy.stats
+from sklearn import metrics
+import exceptionHandle as SelfException
+import MMM.NBText as nb
+import Data.data_preprocessing as data_pre
 
+
+#
+# Data
+#
+class Preprocessing20NewsTest(unittest.TestCase):
+
+    demo_file_list = data_pre.file_location_list(
+        'Data/20news-bydate/test_data/vocabulary.txt', 'Data/20news-bydate/test_data/data.map',
+        'Data/20news-bydate/test_data/train.data', 'Data/20news-bydate/test_data/train.label',
+        'Data/20news-bydate/test_data/test.data', 'Data/20news-bydate/test_data/test.label',
+        'Data/20news-bydate/test_data/final/news.map.csv',
+        'Data/20news-bydate/test_data/final/news.train.csv',
+        'Data/20news-bydate/test_data/final/news.test.csv',
+        'Data/20news-bydate/final/data_info.txt')
+    data_pre.Preprocessing20News.reuters_stop_word_file = 'Data/reuters_wos.txt'
+    data_pre.Preprocessing20News.mi_word_rank_file = 'Data/20news-bydate/test_data/final/mi_word_rank.txt'
+
+    @classmethod
+    def setUpClass(cls):
+
+        cls.preprocessing = data_pre.Preprocessing20News()
+        cls.preprocessing.file_list = cls.demo_file_list
+
+    def test_news_data_basic_process(self):
+        """
+        Checking: Tokenize 20news data, only stemming, remove stop words and one time occurrence words.
+        Expected result: Word id 1, 8 (counted from 1) is ommited by one time occurrence and stop word list
+        :return:
+        """
+        loaded_train_expected = np.asarray([[2., 10., 4., 2., 1., 1., 3., 9., 4.],
+                                                [4., 0., 0., 0., 0., 1., 0., 0., 4.],
+                                                [3., 3., 0., 1., 1., 1., 8., 5., 1.],
+                                                [2., 0., 0., 0., 0., 0., 4., 0., 1.],
+                                                [8., 8., 0., 0., 0., 1., 6., 1., 2.],
+                                                [2., 1., 0., 0., 0., 0., 4., 5., 2.]])
+        loaded_test_expected = np.asarray([[0., 1., 0., 0., 0., 0., 0., 1., 0.],
+                                               [2., 0., 0., 0., 0., 1., 4., 1., 2.],
+                                               [3., 3., 0., 1., 1., 1., 8., 5., 2.],
+                                               [2., 3., 0., 0., 1., 0., 0., 0., 0.]])
+        # news_data_basic_process(scale_length=-1, extract_to_file=False)
+        self.preprocessing.news_data_basic_process(extract_to_file=False)
+
+        # check class number
+        self.assertEqual(20, len(self.preprocessing.loaded_map_data))
+        # check loaded train
+        self.assertTrue((loaded_train_expected == self.preprocessing.loaded_train_data).all())
+        # check loaded map
+        self.assertTrue((loaded_test_expected == self.preprocessing.loaded_test_data).all())
+
+    def test_mutual_information_export(self):
+        """
+        This test checks the element lists of MI calculating.
+        :return:
+        """
+        class_pr_expected = np.asarray([0., 1/3, 1/3, 0., 1/3, 0., 0., 0., 0., 0., 0.,
+                                        0., 0., 0., 0., 0., 0., 0., 0., 0.])
+        word_pr_expected = np.asarray([1/3, 1., 2/3, 1/6, 1/3,
+                                       1/3, 2/3, 1/6, 5/6, 2/3])
+        mi_rank_list_expected = np.asarray([1.584962500721156, 0.0, 6.624767660309072, 1.584962500721156,
+                                            3.3731384929212496, 3.3731384929212496, 6.6247676603090735,
+                                            1.584962500721156, 8.088220835496804, 6.624767660309072])
+        mi_rank_id_list_expected = np.asarray([8, 6, 9, 2, 5, 4, 7, 3, 0, 1])
+
+        (class_pr, word_pr, word_conditional_class_pr, word_mi_rank) = self.preprocessing.mutual_information_export()
+
+        # test basic calculation first
+        self.assertTrue((class_pr_expected == class_pr).all())
+        self.assertTrue((word_pr_expected == word_pr).all())
+        self.assertTrue((word_mi_rank == mi_rank_list_expected).all())
+
+        # test mi rank list
+        mi_rank_id_list = np.loadtxt(self.preprocessing.mi_word_rank_file)
+        self.assertTrue((mi_rank_id_list_expected==mi_rank_id_list).all())
 
 #
 # MMMTest
@@ -635,7 +709,7 @@ class MultinomialManyToOneTest(unittest.TestCase):
             self.assertTrue(diff < epsilon * self.test_generator_1.class_number,
                             'test_argument_estimate_many_one_component: word probability of class '
                             + str(class_counter) + ' mismatch.')
- 
+
 
 #
 # main
@@ -654,18 +728,23 @@ def main():
     mmm_test = [UtilityTest, MultinomialAllLabeledTest, MultinomialEMTest,
                 AgglomerativeTreeTest, MultinomialManyToOneTest]
 
-    temp_mmm_test = []
+    data_preprocessing_test = [Preprocessing20NewsTest]
 
-    # debug
-    require_test = 'MMM'
+    temp_test = [Preprocessing20NewsTest]
+
+    # list of all desired tests
+    require_test = 'temp_test'
+
     # print('Current supported test: [ MMM ]')
     # require_test = input("Test list: ")
     require_test = [x.lower() for x in require_test.split()]
     test_list = []
+    if 'mmm_temp' in require_test:
+        test_list.extend(temp_test)
     if 'mmm' in require_test:
         test_list.extend(mmm_test)
-    if 'mmm_temp' in require_test:
-        test_list.extend(temp_mmm_test)
+    if 'data_preprocessing' in require_test:
+        test_list.extend(data_preprocessing_test)
 
     test_suite = unittest.TestSuite(suite(test_list))
     runner = unittest.TextTestRunner()
