@@ -6,6 +6,7 @@
 import sys
 import copy
 import unittest
+import math
 import numpy as np
 import scipy.stats
 from sklearn import metrics
@@ -26,7 +27,7 @@ class Preprocessing20NewsTest(unittest.TestCase):
         'Data/20news-bydate/test_data/final/news.map.csv',
         'Data/20news-bydate/test_data/final/news.train.csv',
         'Data/20news-bydate/test_data/final/news.test.csv',
-        'Data/20news-bydate/final/data_info.txt')
+        'Data/20news-bydate/test_data/final/data_info.txt')
     data_pre.Preprocessing20News.reuters_stop_word_file = 'Data/reuters_wos.txt'
     data_pre.Preprocessing20News.mi_word_rank_file = 'Data/20news-bydate/test_data/final/mi_word_rank.txt'
 
@@ -35,23 +36,28 @@ class Preprocessing20NewsTest(unittest.TestCase):
 
         cls.preprocessing = data_pre.Preprocessing20News()
         cls.preprocessing.file_list = cls.demo_file_list
+        # extract mi rank file first for  test_news_data_mi_selection_process
+        cls.preprocessing.mutual_information_export()
 
     def test_news_data_basic_process(self):
         """
         Checking: Tokenize 20news data, only stemming, remove stop words and one time occurrence words.
         Expected result: Word id 1, 8 (counted from 1) is ommited by one time occurrence and stop word list
+        This test does not check scale length.
         :return:
         """
+        # TODO test scale length. May brr test_news_data_mi_selection_process
+
         loaded_train_expected = np.asarray([[2., 10., 4., 2., 1., 1., 3., 9., 4.],
-                                                [4., 0., 0., 0., 0., 1., 0., 0., 4.],
-                                                [3., 3., 0., 1., 1., 1., 8., 5., 1.],
-                                                [2., 0., 0., 0., 0., 0., 4., 0., 1.],
-                                                [8., 8., 0., 0., 0., 1., 6., 1., 2.],
-                                                [2., 1., 0., 0., 0., 0., 4., 5., 2.]])
+                                            [4., 0., 0., 0., 0., 1., 0., 0., 4.],
+                                            [3., 3., 0., 1., 1., 1., 8., 5., 1.],
+                                            [2., 0., 0., 0., 0., 0., 4., 0., 1.],
+                                            [8., 8., 0., 0., 0., 1., 6., 1., 2.],
+                                            [2., 1., 0., 0., 0., 0., 4., 5., 2.]])
         loaded_test_expected = np.asarray([[0., 1., 0., 0., 0., 0., 0., 1., 0.],
-                                               [2., 0., 0., 0., 0., 1., 4., 1., 2.],
-                                               [3., 3., 0., 1., 1., 1., 8., 5., 2.],
-                                               [2., 3., 0., 0., 1., 0., 0., 0., 0.]])
+                                           [2., 0., 0., 0., 0., 1., 4., 1., 2.],
+                                           [3., 3., 0., 1., 1., 1., 8., 5., 2.],
+                                           [2., 3., 0., 0., 1., 0., 0., 0., 0.]])
         # news_data_basic_process(scale_length=-1, extract_to_file=False)
         self.preprocessing.news_data_basic_process(extract_to_file=False)
 
@@ -87,8 +93,126 @@ class Preprocessing20NewsTest(unittest.TestCase):
         mi_rank_id_list = np.loadtxt(self.preprocessing.mi_word_rank_file)
         self.assertTrue((mi_rank_id_list_expected==mi_rank_id_list).all())
 
+    def test_news_data_mi_selection_process(self):
+        """
+        Reduce vocabulary size using MI rank list
+
+        [train data]
+        [[4., 2., 10., 4., 2., 1., 1., 1., 3., 9., 4.],
+        [2., 4., 0., 0., 0., 0., 1., 0., 0., 0., 4.],
+        [0., 3., 3., 0., 1., 1., 1., 0., 8., 5., 1.],
+        [0., 2., 0., 0., 0., 0., 0., 0., 4., 0., 1.],
+        [0., 8., 8., 0., 0., 0., 1., 0., 6., 1., 2.],
+        [0., 2., 1., 0., 0., 0., 0., 0., 4., 5., 2.]]
+
+        [test data]
+        [[0., 0., 1., 0., 0., 0., 0., 0., 0., 1., 0.],
+        [0., 2., 0., 0., 0., 0., 1., 0., 4., 1., 2.],
+        [0., 3., 3., 0., 1., 1., 1., 0., 8., 5., 2.],
+        [3., 2., 3., 0., 0., 1., 0., 1., 0., 0., 0.]]
+
+        [MI rank list]
+        [8, 6, 9, 2, 5, 4, 7, 3, 0, 1]
+
+
+        [selected_word_number = 5, pickup ids [8, 6, 9, 2, 5]]
+
+        train data
+        [[ 3., 1., 9. 10., 1., 4.],
+        [ 0., 1., 0., 0., 0., 4.],
+        [ 8., 1., 5., 3., 1., 1.],
+        [ 4., 0., 0., 0., 0., 1.],
+        [ 6., 1., 1., 8., 0., 2.],
+        [ 4., 0., 5., 1., 0., 2.]]
+
+        test data
+        [[0., 0., 1., 1., 0., 0.],
+        [4., 1., 1., 0., 0., 2.],
+        [8., 1., 5., 3., 1., 2.],
+        [0., 0., 0., 3., 1., 0.]]
+
+
+        [selected_word_number = 5, pickup ids [8, 6, 9, 2, 5], length scale= 7]
+
+        train data
+        [[0.875, 0.2916666666666667, 2.625, 2.9166666666666665, 0.2916666666666667, 4.0],
+        [0.0, 7.0, 0.0, 0.0, 0.0, 4.0],
+        [3.111111111111111, 0.3888888888888889, 1.9444444444444444, 1.1666666666666667, 0.3888888888888889, 1.0],
+        [7.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+        [2.625, 0.4375, 0.4375, 3.5, 0.0, 2.0],
+        [2.8, 0.0, 3.5, 0.7, 0.0, 2.0]]
+
+        test data
+        [[0.0, 0.0, 3.5, 3.5, 0.0, 0.0],
+        [4.666666666666667, 1.1666666666666667, 1.1666666666666667, 0.0, 0.0, 2.0],
+        [3.111111111111111, 0.3888888888888889, 1.9444444444444444, 1.1666666666666667, 0.3888888888888889, 2.0],
+        [0.0, 0.0, 0.0, 5.25, 1.75, 0.0]]
+
+        :return:
+        """
+        loaded_train_expected = np.asarray([[3., 1., 9., 10., 1., 4.],
+                                            [0., 1., 0., 0., 0., 4.],
+                                            [8., 1., 5., 3., 1., 1.],
+                                            [4., 0., 0., 0., 0., 1.],
+                                            [6., 1., 1., 8., 0., 2.],
+                                            [4., 0., 5., 1., 0., 2.]])
+        loaded_test_expected = np.asarray([[0., 0., 1., 1., 0., 0.],
+                                           [4., 1., 1., 0., 0., 2.],
+                                           [8., 1., 5., 3., 1., 2.],
+                                           [0., 0., 0., 3., 1., 0.]])
+
+        loaded_train_scale_expected = np.asarray([[0.875, 0.2916666666666667, 2.625, 2.9166666666666665,
+                                                   0.2916666666666667, 4.0],
+                                                  [0.0, 7.0, 0.0, 0.0, 0.0, 4.0],
+                                                  [3.111111111111111, 0.3888888888888889, 1.9444444444444444,
+                                                   1.1666666666666667, 0.3888888888888889, 1.0],
+                                                  [7.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+                                                  [2.625, 0.4375, 0.4375, 3.5, 0.0, 2.0],
+                                                  [2.8, 0.0, 3.5, 0.7, 0.0, 2.0]])
+        loaded_test_scale_expected = np.asarray([[0.0, 0.0, 3.5, 3.5, 0.0, 0.0],
+                                                 [4.666666666666667, 1.1666666666666667,
+                                                  1.1666666666666667, 0.0, 0.0, 2.0],
+                                                 [3.111111111111111, 0.3888888888888889, 1.9444444444444444,
+                                                  1.1666666666666667, 0.3888888888888889, 2.0],
+                                                 [0.0, 0.0, 0.0, 5.25, 1.75, 0.0]])
+
+        # Test 1
+        feature_size = 5
+        scale = -1
+        self.preprocessing.news_data_mi_selection_process(selected_word_number=feature_size,
+                                                          scale_length=scale, extract_to_file=True)
+        # check class number
+        self.assertEqual(20, len(self.preprocessing.loaded_map_data))
+        # check features size
+        self.assertEqual(feature_size + 1, np.shape(self.preprocessing.loaded_train_data)[1])
+        self.assertEqual(feature_size + 1, np.shape(self.preprocessing.loaded_test_data)[1])
+        # check class number
+        self.assertEqual(20, len(self.preprocessing.loaded_map_data))
+
+        # check loaded train
+        self.assertTrue((loaded_train_expected == self.preprocessing.loaded_train_data).all())
+        # check loaded map
+        self.assertTrue((loaded_test_expected == self.preprocessing.loaded_test_data).all())
+
+        # Test 2
+        feature_size = 5
+        scale = 7.
+        self.preprocessing.news_data_mi_selection_process(selected_word_number=feature_size,
+                                                          scale_length=scale, extract_to_file=True)
+        # check sum all features is equal to scale
+        sum_list_train = self.preprocessing.loaded_train_data.T[:-1].sum(axis=0)
+        sum_list_test = self.preprocessing.loaded_test_data.T[:-1].sum(axis=0)
+        self.assertTrue(np.isclose(sum_list_train, scale).all())
+        self.assertTrue(np.isclose(sum_list_test, scale).all())
+
+        # check loaded train
+        self.assertTrue((loaded_train_scale_expected == self.preprocessing.loaded_train_data).all())
+        # check loaded map
+        self.assertTrue((loaded_test_scale_expected == self.preprocessing.loaded_test_data).all())
+
+
 #
-# MMMTest
+# MMMTestnp
 #
 class UtilityTest(unittest.TestCase):
 
@@ -733,7 +857,8 @@ def main():
     temp_test = [Preprocessing20NewsTest]
 
     # list of all desired tests
-    require_test = 'temp_test'
+    require_test = 'mmm_test data_preprocessing_test'
+    # require_test = 'temp_test'
 
     # print('Current supported test: [ MMM ]')
     # require_test = input("Test list: ")

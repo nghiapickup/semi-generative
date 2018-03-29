@@ -175,7 +175,7 @@ class Preprocessing20News(object):
         with open(self.file_list.log_output, 'w') as f:
             f.write('train number ' + str(np.shape(train_data)[0]) + '\n')
             f.write('test number ' + str(np.shape(test_data)[0]) + '\n')
-            f.write('feature number ' + str(np.shape(train_data)[1]) + '\n')
+            f.write('feature number ' + str(np.shape(train_data)[1] - 1) + '\n')
 
     def news_data_basic_process(self, scale_length=-1, extract_to_file=False):
         """
@@ -230,6 +230,14 @@ class Preprocessing20News(object):
         except BaseException:
             raise
 
+        # scaling data with fix length
+        # a = (a.T * scale / a.sum(axis=1)).T
+        # We omit the label a.T[:-1].T before calculating
+        # * Should do this before remove feature. It makes sure that there is no zero vector
+        if scale_length > 0:
+            train_data.T[:-1] = train_data.T[:-1] * scale_length / train_data.T[:-1].sum(axis=0)
+            test_data.T[:-1] = test_data.T[:-1] * scale_length / test_data.T[:-1].sum(axis=0)
+
         # remove stop word & one time occurrence word
         # do this after transfer into mat then we no need to re-index words id
         remove_id = [id for id, val in enumerate(vocabulary_load) if val in stop_word_load]
@@ -240,14 +248,6 @@ class Preprocessing20News(object):
         remove_id = np.append(remove_id, temp_sum_word)
         train_data = np.delete(train_data, remove_id, axis=1)
         test_data = np.delete(test_data, remove_id, axis=1)
-
-        # check count size for scaling estimate
-        # x = [id for id, val in enumerate(np.sum(train_data.T[:-1].T, axis=1)) if val == 0]
-
-        # scaling data with fix length
-        if scale_length > 0:
-            train_data = (train_data.T / train_data.sum(axis=1)).T
-            test_data = (test_data.T * scale_length / test_data.sum(axis=1)).T
 
         # extract to files
         if extract_to_file:
@@ -364,16 +364,21 @@ class Preprocessing20News(object):
         except BaseException:
             raise
 
+        # scaling data with fix length
+        # a = (a.T * scale / a.sum(axis=1)).T
+        # We omit the label a.T[:-1].T before calculating
+        # * Should do this before remove feature. It makes sure that there is no zero vector
+        if scale_length > 0:
+            train_data.T[:-1] = train_data.T[:-1] * scale_length / train_data.T[:-1].sum(axis=0)
+            test_data.T[:-1] = test_data.T[:-1] * scale_length / test_data.T[:-1].sum(axis=0)
+
         # only pick data in mi rank list
         # TODO: exception when selected_word_number > vocabulary size
         pick_id = mi_rank_list_load[:selected_word_number]
-        train_data = train_data[pick_id]
-        test_data = test_data[pick_id]
-
-        # scaling data with fix length
-        if scale_length > 0:
-            train_data = (train_data.T / train_data.sum(axis=1)).T
-            test_data = (test_data.T * scale_length / test_data.sum(axis=1)).T
+        pick_id = np.append(pick_id, -1) # add label
+        # noting here the order of word is now follow the MI rank list
+        train_data = train_data.T[pick_id].T
+        test_data = test_data.T[pick_id].T
 
         # extract to files
         if extract_to_file:
@@ -382,6 +387,7 @@ class Preprocessing20News(object):
         self.loaded_map_data = map_load
         self.loaded_train_data = train_data
         self.loaded_test_data = test_data
+
 
 def main():
     try:
@@ -398,7 +404,7 @@ def main():
         # cmd = ['mutual_information_export']
 
         # news_data_mi_selection_process(self, selected_word_number=300, scale_length=-1, extract_to_file=False)
-        cmd = 'news_data_mi_selection_process 400 7 extract_to_file=True'.split()
+        cmd = 'news_data_mi_selection_process 10 7 extract_to_file=True'.split()
 
         list_accepted_function = 'news_data_basic_process mutual_information_export ' \
                                  'news_data_mi_selection_process'.split()
