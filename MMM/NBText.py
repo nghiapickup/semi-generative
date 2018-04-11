@@ -6,20 +6,30 @@
 # Implemented code here is better than GMM,
 # my priority is estimating my work first
 
+import os
 import sys
 import numpy as np
+import logging
 from scipy import special
 from namedlist import namedlist
 from sklearn import metrics
 from sklearn import model_selection
 import exceptionHandle as SelfException
+import Data.data_preprocessing as data_process
+
+logger = logging.getLogger(__name__)
+SelfException.LogHandler('NBText')
 
 
 class Dataset(object):
     __doc__ = 'Basic data frame' \
-              'At this time, this class only supports equal length feature vector input'
+              'this class only supports equal length feature vector input'
 
     def __init__(self, *args):
+        """
+        Init Dataset empty instance or from other Dataset (copy data)
+        :param args:
+        """
         try:
             if len(args) == 0 or args[0] is None:
                 # data files
@@ -93,12 +103,13 @@ class Dataset(object):
 class SslDataset(Dataset):
     __doc__ = 'Data frame for Semi-supervised Learning'
 
-    def __init__(self, dataset=None, unlabeled_size=.5):
+    def __init__(self, dataset=None, unlabeled_size=.5, random_seed=None):
         """
         This only take instance from exist Dataset and split labeled and unlabeled data by scaling size unlabeled_size
         The default scale is .5
         :param dataset: Base data, if dataset = None: set empty class.
         :param unlabeled_size: size of unlabeled data
+        :param random_seed: numeric or None, seed of random splitting generator, default is None
         """
         super().__init__(dataset)
         # data structure
@@ -110,28 +121,40 @@ class SslDataset(Dataset):
         self.train_labeled_number = 0
         self.train_unlabeled_number = 0
 
-        if dataset is not None:
-            # split training data by unlabeled_size
-            try:
-                if (type(unlabeled_size) is not float) or (1.0 <= unlabeled_size < 0.0 ):
-                    raise SelfException.DataSizeConstraint('Unlabeled_size must be a float and in range of [0,1).')
-                sss = model_selection.StratifiedShuffleSplit(n_splits=1, test_size=unlabeled_size, random_state=0)
-                # notice: set random_state is a constant to make sure that the next scaling is the expand of last data set
+        self.unlabeled_size = unlabeled_size
+        self.random_seed = random_seed
+
+        try:
+            if type(dataset) is Dataset:
+                # split training data by unlabeled_size
+                # TODO Becareful with StratifiedShuffleSplit
+                sss = model_selection.StratifiedShuffleSplit(n_splits=1, test_size=self.unlabeled_size,
+                                                             random_state=self.random_seed)
                 for labeled_indices, unlabeled_indices in sss.split(self.train_x, self.train_y):
                     self.train_xl = self.train_x[labeled_indices]
                     self.train_yl = self.train_y[labeled_indices, 0]
                     self.train_xu = self.train_x[unlabeled_indices]
                     self.train_yu = self.train_y[unlabeled_indices, 0]
-
                 self.train_labeled_number = len(self.train_xl)
                 self.train_unlabeled_number = len(self.train_xu)
 
-            except SelfException.DataSizeConstraint as e:
-                e.recall_traceback(sys.exc_info())
+            elif type(dataset) is SslDataset:
+                # copy SslDataset
+                self.train_xl = dataset.train_xl
+                self.train_yl = dataset.train_yl
+                self.train_xu = dataset.train_xu
+                self.train_yu = dataset.train_yu
+                self.train_labeled_number = dataset.train_labeled_number
+                self.train_unlabeled_number = dataset.train_unlabeled_number
+            elif dataset is not None:
+                raise SelfException.DataTypeConstraint('SslDataset init: dataset datatype does not match')
 
-            except BaseException:
-                print('Unknown error!')
-                raise
+        except SelfException.DataTypeConstraint as e:
+            e.recall_traceback(sys.exc_info())
+
+        except BaseException:
+            print('Unknown error!')
+            raise
 
 
 class Utility(object):
@@ -576,7 +599,7 @@ class MultinomialManyToOne(object):
 
 """ Hierarchy tree data type.
 Despite saving the mean vector, it is easier to save sum of all vector and sum of sum vector.
-When we merge tree, the updating only sum both of them.
+When we merge tree, the updating only sums both of them.
 :param sum_vector: vector sum of count
 :param element_id_list: list of tree's element id
 :param splitter_list: location and order of splitter use for re-building the tree
@@ -701,7 +724,7 @@ class AgglomerativeTree(object):
                 data_list[min_index[0]].splitter_list.append(splitter(id=extend_length-1, order=splitter_count))
 
                 # TODO: Finding a fast way to update metric matrix
-                # update metric matrix on new min_index[0]
+                # update metric matrix for new min_index[0]
                 for i in range(len(data_list)):
                     if i != min_index[0]:
                         cluster_metric[min_index[0], i] = self.metric(data_list[min_index[0]], data_list[i])
@@ -739,31 +762,173 @@ class AgglomerativeTree(object):
         return hierarchy_scheme
 
 
-class Evaluation(object):
-    __doc__ = 'Evaluation methods'
+class NewsEvaluation(object):
+    __doc__ = 'Evaluation methods using 20news dataset' \
+              'train number 11269' \
+              'test number 7505' \
+              'vocabulary size 61188'
+    result_return_form = namedlist('result_return_form', 'accuracy, precision, recall, f1, support')
 
-    def __init__(self, dataset):
-        try:
-            if type(dataset) is not SslDataset:
-                raise SelfException.DataTypeConstraint('Dataset type is not SslDataset.')
-            self.data = dataset
+    def __init__(self):
+        self.default_dir = 'data/'
+        self.map_filename, self.train_filename, self.test_filename = 'news.map.csv', 'news.train.csv', 'news.test.csv'
 
-            self.hierarchy_scheme = []
+        # exp_feature_selection_1a
+        self.sub_folder_list_1a = '1a_scale 1a_no_scale'.split()
 
-        except SelfException.DataTypeConstraint as e:
-            e.recall_traceback(sys.exc_info())
-
-        except BaseException:
-            print('Unknown error!')
-            raise
     # Note for the returned agglomerative tree
     # 1. there are 2 arguments for many_to_one :
     # First is the list count of component per each class
     # Second is the list assignment labeled data for each component
-    #   So this list is a list of n sub-list which c equals to number of class
+    #   So this list is a list of n sub-list with n equals to number of class
     #   each sub-list n_i is m_i sub-sub-list, with m_i is the number of components of class i
     #   each |m_i| sub-sub-sub-list is including labeled data ids of each component in class i
     # NOTE: The order of class must follow class id. That means class 0 will be before class 1, ...
+
+    def report_export(self, model, file_name, extend_file=False, detail_return=False):
+        """
+        Export report
+        :param model:
+        :param file_name: file name
+        :param extend: bool, set true if extend train and test files for test many to one
+        :return:
+        """
+        label = model.data.class_name_list
+        target = model.data.test_y
+        prediction = model.predicted_label
+
+        # calculate evaluation index
+        accuracy = metrics.accuracy_score(target, prediction)
+        report = metrics.classification_report(target, prediction, target_names=label)
+
+        # export report
+        if extend_file:
+            with open(file_name, 'a') as f:
+                f.write(report)
+                f.writelines('\n#labeled: ' + str(model.data.train_labeled_number))
+                f.writelines('\n#unlabeled: ' + str(model.data.train_unlabeled_number))
+                f.writelines('\nAccuracy: ' + str(accuracy))
+                f.writelines('\n')
+        else:
+            with open(file_name, 'w') as f:
+                f.write(report)
+                f.writelines('\n#labeled: ' + str(model.data.train_labeled_number))
+                f.writelines('\n#unlabeled: ' + str(model.data.train_unlabeled_number))
+                f.writelines('\nAccuracy: ' + str(accuracy))
+                f.writelines('\n')
+
+        # return value in detail
+        if detail_return:
+            detail = metrics.precision_recall_fscore_support(target, prediction)
+            return self.result_return_form(accuracy=accuracy,
+                                           precision=detail[0].round(4), recall=detail[1].round(4),
+                                           f1=detail[2].round(4), support=detail[3])
+
+    # I. The advantage of unlabeled data
+    # a) test feature selection
+    def exp_feature_selection_1a(self, unlabeled_size=6000, n_splits=5, random_seed=0):
+        """
+        exp the feature selection. There are 2 things we need to experiment:
+        1. Scaling data
+        2. Feature selection using Mutual Information (MI) word rank
+        the method is comparing NB and EM with 2 types of data: scaling and non-scaling
+        in corresponding with difference number of selected word features.
+
+        Expected:
+        - The upper hand of scaling data
+        - Finding a good range of word number should be chosen
+
+        Data Reading:
+        The func will scan default_dir location and process through all sub-folder in sub_folder_list (one-by-one).
+        In each sub-folder contains all test cases for one exp.
+        The process will perform the algorithm and return the result file in the same folder of each test case.
+
+        :param unlabeled_size: size of unlabeled training data
+        :param n_splits: number of split fold for train labeled data
+        :param random_seed: default = 0, random seed
+        :return:
+        """
+        sub_folder_list = self.sub_folder_list_1a
+        nb_result_filename = 'NB_result.log'
+        em_result_filename = 'EM_result.log'
+        try:
+            # this default exp uses 6000 data as unlabeled data, the remaining is split into 5 non-overlap parts with size 1000
+            for sub_folder in sub_folder_list:
+                # get all tests in sub-folder
+                test_folder_list = next(os.walk(self.default_dir + sub_folder + '/'))[1]
+                for test_folder in test_folder_list:
+                    test_dir = self.default_dir + sub_folder + '/' + test_folder + '/'
+                    origin_data = Dataset()
+                    origin_data.load_from_csv([test_dir + self.map_filename,
+                                        test_dir + self.train_filename, test_dir + self.test_filename])
+                    origin_ssl_data = SslDataset(origin_data, unlabeled_size=unlabeled_size, random_seed=random_seed)
+                    skf = model_selection.StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+
+                    # split train data into 5 overlap parts and get the average
+                    avg_NB_result = None
+                    avg_EM_result = None
+                    for _, testcase_train_index in skf.split(origin_ssl_data.train_xl, origin_ssl_data.train_yl):
+                        # TODO Check the copied elements
+                        testcase_data = SslDataset(origin_ssl_data)
+                        testcase_data.train_xl = origin_ssl_data.train_xl[testcase_train_index]
+                        testcase_data.train_yl = origin_ssl_data.train_yl[testcase_train_index]
+                        testcase_data.train_labeled_number = len(testcase_train_index)
+
+                        # Test Naive Bayes
+                        nb_model = MultinomialAllLabeled(testcase_data)
+                        nb_model.train()
+                        nb_model.test()
+                        temp_result = self.report_export(nb_model, test_dir + nb_result_filename,
+                                                         extend_file=True, detail_return=True)
+                        if avg_NB_result is None:
+                            avg_NB_result = temp_result
+                        else:
+                            avg_NB_result.accuracy += temp_result.accuracy
+                            avg_NB_result.precision += temp_result.precision
+                            avg_NB_result.recall += temp_result.recall
+                            avg_NB_result.f1 += temp_result.f1
+
+                        # Test EM
+                        em_model = MultinomialEM(testcase_data)
+                        em_model.train()
+                        em_model.test()
+                        temp_result = self.report_export(em_model, test_dir + em_result_filename,
+                                                         extend_file=True, detail_return= True)
+                        if avg_EM_result is None:
+                            avg_EM_result = temp_result
+                        else:
+                            avg_EM_result.accuracy += temp_result.accuracy
+                            avg_EM_result.precision += temp_result.precision
+                            avg_EM_result.recall += temp_result.recall
+                            avg_EM_result.f1 += temp_result.f1
+                    # compute average values
+                    avg_NB_result.accuracy, avg_NB_result.precision, avg_NB_result.recall, avg_NB_result.f1 = \
+                        np.divide(avg_NB_result.accuracy, n_splits), \
+                        np.divide(avg_NB_result.precision, n_splits), \
+                        np.divide(avg_NB_result.recall, n_splits), \
+                        np.divide(avg_NB_result.f1, n_splits)
+                    avg_EM_result.accuracy, avg_EM_result.precision, avg_EM_result.recall, avg_EM_result.f1 = \
+                        np.divide(avg_EM_result.accuracy, n_splits), \
+                        np.divide(avg_EM_result.precision, n_splits), \
+                        np.divide(avg_EM_result.recall, n_splits), \
+                        np.divide(avg_EM_result.f1, n_splits)
+                    with open(test_dir + nb_result_filename, 'a') as f:
+                        f.writelines('\n AVERAGE NB')
+                        f.writelines('\n Accuracy ' + str(avg_NB_result.accuracy))
+                        f.writelines('\n Precision ' + str(avg_NB_result.precision))
+                        f.writelines('\n Recall ' + str(avg_NB_result.recall))
+                        f.writelines('\n f1 ' + str(avg_NB_result.f1))
+                        f.writelines('\n')
+                    with open(test_dir + em_result_filename, 'a') as f:
+                        f.writelines('\n AVERAGE EM')
+                        f.writelines('\n Accuracy ' + str(avg_EM_result.accuracy))
+                        f.writelines('\n Precision ' + str(avg_EM_result.precision))
+                        f.writelines('\n Recall ' + str(avg_EM_result.recall))
+                        f.writelines('\n f1 ' + str(avg_EM_result.f1))
+                        f.writelines('\n')
+
+        except BaseException:
+            raise
 
 
 def main():
@@ -772,8 +937,13 @@ def main():
         #     list_file = sys.argv[1:]
         # else:
         #     list_file = input("command: ").split()
+        evaluation = NewsEvaluation()
+
+        logger.info('Start Evaluation - exp_feature_selection_1a')
+        evaluation.exp_feature_selection_1a()
 
         print('Done!')
+        logger.info('Done!')
     except BaseException:
         raise
 

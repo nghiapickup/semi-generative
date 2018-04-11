@@ -1,0 +1,10 @@
+all data		18774
+train number 	13774
+test number 	5000
+vocabulary size 61188
+
+label 			[ 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20]
+
+all data		[798 970 963 979 958 982 964 987 993 991 997 989 984 987 985 997 909 940 774 627]
+
+test equaly distributed 250 instances per each class

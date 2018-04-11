@@ -1,5 +1,16 @@
 import traceback
+import logging
 import os
+
+
+def LogHandler(name):
+    """
+    return log Handler
+    :return:
+    """
+    logging.basicConfig(filename=name + '.log',
+                        level=logging.INFO,
+                        format='%(asctime)s %(levelname)s %(message)s')
 
 
 class BaseExceptionHandle(Exception):

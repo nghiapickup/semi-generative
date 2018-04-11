@@ -4,16 +4,16 @@
 # @nghia n h | Yamada-lab
 
 import sys
+import os
 import copy
 import unittest
-import math
 import numpy as np
 import scipy.stats
 from sklearn import metrics
 import exceptionHandle as SelfException
 import MMM.NBText as nb
 import Data.data_preprocessing as data_pre
-
+import Data.origin_data_splitter as origin_data
 
 #
 # Data
@@ -209,6 +209,99 @@ class Preprocessing20NewsTest(unittest.TestCase):
         self.assertTrue((loaded_train_scale_expected == self.preprocessing.loaded_train_data).all())
         # check loaded map
         self.assertTrue((loaded_test_scale_expected == self.preprocessing.loaded_test_data).all())
+
+class origin_data_splitter_test(unittest.TestCase):
+    __doc__ = 'test origin_data_splitter'
+
+    @classmethod
+    def setUpClass(clsc):
+        origin_data.merge_origin_file_dir = origin_data.file_dir_list(
+            vocabulary_file='Data/20news-bydate/test_data/origin/merge_origin/vocabulary.txt',
+            map_input='Data/20news-bydate/test_data/origin/merge_origin/data.map',
+            train_input='Data/20news-bydate/test_data/origin/merge_origin/train.data',
+            train_label_input='Data/20news-bydate/test_data/origin/merge_origin/train.label',
+            test_input='',
+            test_label_input='',
+            data_info='Data/20news-bydate/test_data/origin/merge_origin/info.txt')
+
+        # Sorted by data and split with 60-40 train-test scale
+        origin_data.bydate_origin_file_dir = origin_data.file_dir_list(
+            vocabulary_file='Data/20news-bydate/test_data/origin/bydate_origin/vocabulary.txt',
+            map_input='Data/20news-bydate/test_data/origin/bydate_origin/data.map',
+            train_input='Data/20news-bydate/test_data/origin/bydate_origin/train.data',
+            train_label_input='Data/20news-bydate/test_data/origin/bydate_origin/train.label',
+            test_input='Data/20news-bydate/test_data/origin/bydate_origin/test.data',
+            test_label_input='Data/20news-bydate/test_data/origin/bydate_origin/test.label',
+            data_info='Data/20news-bydate/test_data/origin/bydate_origin/info.txt')
+
+        # Sorted by data and split with equal number of instances per class
+        origin_data.equal_class_test_file_dir = origin_data.file_dir_list(
+            vocabulary_file='Data/20news-bydate/test_data/origin/equal_class_test_data/vocabulary.txt',
+            map_input='Data/20news-bydate/test_data/origin/equal_class_test_data/data.map',
+            train_input='Data/20news-bydate/test_data/origin/equal_class_test_data/train.data',
+            train_label_input='Data/20news-bydate/test_data/origin/equal_class_test_data/train.label',
+            test_input='Data/20news-bydate/test_data/origin/equal_class_test_data/test.data',
+            test_label_input='Data/20news-bydate/test_data/origin/equal_class_test_data/test.label',
+            data_info='Data/20news-bydate/test_data/origin/equal_class_test_data/info.txt')
+
+    def test_merge_origin_data(self):
+        """
+        test total data number
+        :return:
+        """
+        expected_counter = 10
+        counter = origin_data.merge_origin_data()
+        self.assertEqual(expected_counter, counter, 'test_merge_origin_data: merged data is not match')
+
+        # test expected train data
+        expected_train = [(1, 3, 1), (1, 10, 1), (2, 1, 3), (2, 2, 2), (2, 3, 3), (2, 6, 1), (2, 8, 1),
+                          (3, 2, 3), (3, 3, 3), (3, 5, 1), (3, 6, 1), (3, 7, 1), (3, 9, 8), (3, 10, 5),
+                          (4, 2, 2), (4, 9, 4), (5, 2, 8), (5, 3, 8), (5, 7, 1), (5, 9, 6), (5, 10, 1),
+                          (6, 2, 2), (6, 3, 1), (6, 9, 4), (6, 10, 5), (7, 2, 2), (7, 7, 1), (7, 9, 4),
+                          (7, 10, 1), (8, 2, 3), (8, 3, 3), (8, 5, 1), (8, 6, 1), (8, 7, 1), (8, 9, 8),
+                          (8, 10, 5), (9, 1, 4), (9, 2, 2), (9, 3, 10), (9, 4, 4), (9, 5, 2), (9, 6, 1),
+                          (9, 7, 1), (9, 8, 1), (9, 9, 3), (9, 10, 9), (10, 1, 2), (10, 2, 4), (10, 7, 1)]
+        train_load = np.loadtxt(origin_data.merge_origin_file_dir.train_input, dtype='int')
+        for tup_id, _ in enumerate(train_load):
+            self.assertTrue(all(expected_train[tup_id] == train_load[tup_id]))
+
+        # test expected test data
+        expected_test = [1, 1, 2, 2, 3, 3, 3, 3, 5, 5]
+        test_load = np.loadtxt(origin_data.merge_origin_file_dir.train_label_input, dtype='int')
+        self.assertTrue(all(test_load == expected_test))
+
+    def test_equal_class_test_data_generator(self):
+        """
+        this test uses test_merge_origin_data result
+        Only load equal_class_test_data_generator function and check the result
+        :return:
+        """
+        origin_data.equal_class_test_data_generator(test_instance_per_class=1)
+        train_load = np.loadtxt(origin_data.equal_class_test_file_dir.train_input)
+        train_label_load = np.loadtxt(origin_data.equal_class_test_file_dir.train_label_input)
+        test_load = np.loadtxt(origin_data.equal_class_test_file_dir.test_input)
+        test_label_load = np.loadtxt(origin_data.equal_class_test_file_dir.test_label_input)
+
+        train_expected = [(1, 3, 1), (1, 10, 1), (2, 2, 3), (2, 3, 3), (2, 5, 1), (2, 6, 1),
+                                (2, 7, 1), (2, 9, 8), (2, 10, 5), (3, 2, 8), (3, 3, 8), (3, 7, 1),
+                                (3, 9, 6), (3, 10, 1), (4, 2, 2), (4, 3, 1), (4, 9, 4), (4, 10, 5),
+                                (5, 2, 2), (5, 7, 1), (5, 9, 4), (5, 10, 1), (6, 1, 4), (6, 2, 2),
+                                (6, 3, 10), (6, 4, 4), (6, 5, 2), (6, 6, 1), (6, 7, 1), (6, 8, 1),
+                                (6, 9, 3), (6, 10, 9)]
+        train_label_expected = [1, 2, 3, 3, 3, 5]
+
+        test_expected = [(1, 1, 3), (1, 2, 2), (1, 3, 3), (1, 6, 1), (1, 8, 1), (2, 2, 2), (2, 9, 4),
+                         (3, 2, 3), (3, 3, 3), (3, 5, 1), (3, 6, 1), (3, 7, 1), (3, 9, 8), (3, 10, 5),
+                         (4, 1, 2), (4, 2, 4), (4, 7, 1)]
+        test_label_expected = [1, 2, 3, 5]
+
+        for tup_id, _ in enumerate(train_load):
+            self.assertTrue(all(train_expected[tup_id] == train_load[tup_id]))
+        self.assertTrue(all(train_label_expected == train_label_load))
+
+        for tup_id, _ in enumerate(test_load):
+            self.assertTrue(all(test_expected[tup_id] == test_load[tup_id]))
+        self.assertTrue(all(test_label_expected == test_label_load))
 
 
 #
@@ -473,16 +566,22 @@ class DataTestGenerator(object):
             print('Unknown error!')
             raise
 
-    def csv_export(self, pre_dir, extend_mode=False):
+    def csv_export(self, pre_dir, export_name_list=None, extend_mode=False):
         """
         export data_list to csv file
         :param pre_dir: prefix location for test data
         :param extend_mode: bool, set true if extend train and test files for test many to one
         :return:
         """
-        self.map_file = pre_dir + self.default_export_path + 'map.csv'
-        self.train_file = pre_dir + self.default_export_path + 'train.csv'
-        self.test_file = pre_dir + self.default_export_path + 'test.csv'
+        if export_name_list is not None:
+            # TODO check export_name_list condition: List of 3 elements
+            self.map_file = pre_dir + self.default_export_path + export_name_list[0]
+            self.train_file = pre_dir + self.default_export_path + export_name_list[1]
+            self.test_file = pre_dir + self.default_export_path + export_name_list[2]
+        else:
+            self.map_file = pre_dir + self.default_export_path + 'map.csv'
+            self.train_file = pre_dir + self.default_export_path + 'train.csv'
+            self.test_file = pre_dir + self.default_export_path + 'test.csv'
         # map, train, test save
         if extend_mode:
             with open(self.train_file, 'a') as f:
@@ -699,7 +798,7 @@ class MultinomialManyToOneTest(unittest.TestCase):
             total_word_count=100,
             test_size_per_class=20)
 
-    def tes_equal_sampling(self):
+    def test_equal_sampling(self):
         """
         test sum of all elements is 1
         :return:
@@ -716,7 +815,7 @@ class MultinomialManyToOneTest(unittest.TestCase):
         result_3 = nb.MultinomialManyToOne.equal_sampling(test_size_3)
         self.assertEqual(1, result_3.sum(), 'test_equal_sampling: Fail in test 3')
 
-    def tes_argument_estimate_one_one_component(self):
+    def test_argument_estimate_one_one_component(self):
         """
         Simpple test with only one component per class.
         The expected result should be same as MultinomialEM
@@ -836,6 +935,56 @@ class MultinomialManyToOneTest(unittest.TestCase):
 
 
 #
+# Evaluation Test
+#
+class NewsEvaluationTest(unittest.TestCase):
+    __doc__ = 'This test mostly only create test data and no exception is raised'
+
+    default_export_filename_list = ['news.map.csv', 'news.train.csv', 'news.test.csv']
+
+    @classmethod
+    def setUpClass(cls):
+        cls.sub_folder_1a = ['1a_scale/', '1a_no_scale/']
+
+    def test_exp_feature_selection_1a(self):
+        exception_raise = False
+        try:
+            # use the same data generator
+            test_generator = DataTestGenerator(
+                np.vstack(
+                    [np.asarray([0.25, 0.25, 0.25, 0.25]),
+                     np.asarray([0.3, 0.4, 0.2, 0.1]),
+                     np.asarray([0.2, 0.2, 0.2, 0.4]),
+                     np.asarray([0.1, 0.3, 0.3, 0.3])]),
+                np.asarray([0.2, 0.5, 0.15, 0.15]),
+                train_size=1000,
+                total_word_count=100,
+                test_size_per_class=10)
+            # data generator
+            for sub_folder in self.sub_folder_1a:
+                for test_count in range(2):
+                    # only 2 cases per sub-folder
+                    # dir: MMM/test_generator.default_export_path/sub_folder/test_count/self.default_export_filename_list
+
+                    test_dir = sub_folder + str(test_count) + '/'
+                    os.makedirs(os.path.dirname('MMM/' + test_generator.default_export_path + test_dir), exist_ok=True)
+                    # update filename_list with sub_folder/test_count folder
+                    filename_list =[test_dir + self.default_export_filename_list[0],
+                                    test_dir + self.default_export_filename_list[1],
+                                    test_dir + self.default_export_filename_list[2]]
+                    test_generator.csv_export('MMM/', export_name_list=filename_list)
+
+            # test model
+            evaluation = nb.NewsEvaluation()
+            evaluation.default_dir = 'MMM/test_data/'
+            evaluation.exp_feature_selection_1a(unlabeled_size=400, n_splits=3)
+        except:
+            exception_raise = True
+
+        self.assertFalse(exception_raise, 'test_exp_feature_selection_1a: Exception raised!')
+
+
+#
 # main
 #
 def suite(test_classes):
@@ -852,24 +1001,28 @@ def main():
     mmm_test = [UtilityTest, MultinomialAllLabeledTest, MultinomialEMTest,
                 AgglomerativeTreeTest, MultinomialManyToOneTest]
 
-    data_preprocessing_test = [Preprocessing20NewsTest]
+    data_preprocessing_test = [Preprocessing20NewsTest, origin_data_splitter_test]
 
-    temp_test = [Preprocessing20NewsTest]
+    evaluation_test = [NewsEvaluationTest]
+
+    temp_test = []
 
     # list of all desired tests
-    require_test = 'mmm_test data_preprocessing_test'
+    require_test = 'mmm_test data_preprocessing_test evaluation_test'
     # require_test = 'temp_test'
 
     # print('Current supported test: [ MMM ]')
     # require_test = input("Test list: ")
     require_test = [x.lower() for x in require_test.split()]
     test_list = []
-    if 'mmm_temp' in require_test:
+    if 'temp_test' in require_test:
         test_list.extend(temp_test)
     if 'mmm' in require_test:
         test_list.extend(mmm_test)
     if 'data_preprocessing' in require_test:
         test_list.extend(data_preprocessing_test)
+    if 'evaluation_test' in require_test:
+        test_list.extend(evaluation_test)
 
     test_suite = unittest.TestSuite(suite(test_list))
     runner = unittest.TextTestRunner()

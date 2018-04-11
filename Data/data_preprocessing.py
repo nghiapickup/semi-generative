@@ -11,6 +11,10 @@ import collections
 import exceptionHandle as SelfException
 import numpy as np
 from sklearn import model_selection
+import logging
+
+logger = logging.getLogger(__name__)
+SelfException.LogHandler(__name__)
 
 
 class PreprocessingSample(object):
@@ -140,22 +144,29 @@ class PreprocessingSample(object):
 file_location_list = collections.namedtuple('file_location_list', 'vocabulary_file, map_input, '
                                                                   'train_input, train_label_input, '
                                                                   'test_input, test_label_input, '
-                                                                  'map_output, train_output, test_output, log_output')
+                                                                  'map_output, train_output, test_output, data_info')
 
 class Preprocessing20News(object):
     __doc__ = '20News data pre-processing.'
 
     reuters_stop_word_file = 'reuters_wos.txt'
-    mi_word_rank_file = '20news-bydate/final/mi_word_rank.txt'
+    mi_word_rank_file = '20news-bydate/mi_word_rank.txt'
     required_parameter = 1
 
-    def __init__(self):
-        # common attribute
+    def __init__(self, subfolder=''):
+        """
+        init common attribute
+        :param subfolder: sub folder for output files
+        """
+        # TODO check sub-folder type is string
+
         self.file_list = file_location_list('20news-bydate/vocabulary.txt', '20news-bydate/data.map',
-                                       '20news-bydate/train.data', '20news-bydate/train.label',
-                                       '20news-bydate/test.data', '20news-bydate/test.label',
-                                       '20news-bydate/final/news.map.csv', '20news-bydate/final/news.train.csv',
-                                       '20news-bydate/final/news.test.csv', '20news-bydate/final/data_info.txt')
+                                            '20news-bydate/train.data', '20news-bydate/train.label',
+                                            '20news-bydate/test.data', '20news-bydate/test.label',
+                                            '20news-bydate/final/' + subfolder + '/news.map.csv',
+                                            '20news-bydate/final/' + subfolder + '/news.train.csv',
+                                            '20news-bydate/final/' + subfolder + '/news.test.csv',
+                                            '20news-bydate/final/' + subfolder + '/data_info.txt')
         self.loaded_map_data = np.empty(0)
         self.loaded_train_data = np.empty(0)
         self.loaded_test_data = np.empty(0)
@@ -168,11 +179,21 @@ class Preprocessing20News(object):
         :param test_data:
         :return:
         """
-        np.savetxt(self.file_list.train_output, train_data[:], fmt="%s", delimiter=',')
-        np.savetxt(self.file_list.test_output, test_data[:], fmt="%s", delimiter=',')
-        np.savetxt(self.file_list.map_output, np.mat(map_data)[0], fmt="%s", delimiter=',')
+        # the first exitst_ok shoule be False, this makes sure that all dir is empty before creating new data files
+        os.makedirs(os.path.dirname(self.file_list.train_output), exist_ok=False)
+        with open(self.file_list.train_output, 'w') as f:
+            np.savetxt(f, train_data[:], fmt="%s", delimiter=',')
 
-        with open(self.file_list.log_output, 'w') as f:
+        os.makedirs(os.path.dirname(self.file_list.train_output), exist_ok=True)
+        with open(self.file_list.test_output, 'w') as f:
+            np.savetxt(f, test_data[:], fmt="%s", delimiter=',')
+
+        os.makedirs(os.path.dirname(self.file_list.train_output), exist_ok=True)
+        with open(self.file_list.map_output, 'w') as f:
+            np.savetxt(f, np.mat(map_data)[0], fmt="%s", delimiter=',')
+
+        os.makedirs(os.path.dirname(self.file_list.train_output), exist_ok=True)
+        with open(self.file_list.data_info, 'w') as f:
             f.write('train number ' + str(np.shape(train_data)[0]) + '\n')
             f.write('test number ' + str(np.shape(test_data)[0]) + '\n')
             f.write('feature number ' + str(np.shape(train_data)[1] - 1) + '\n')
@@ -391,41 +412,67 @@ class Preprocessing20News(object):
 
 def main():
     try:
-        # # input function name and args
-        # if len(sys.argv) > 1:
-        #     cmd = sys.argv[1:]
-        # else:
-        #     cmd = input("command: ").split()
+        cmd_list_test = ['1a_test',
+                         'news_data_mi_selection_process 100 1 extract_to_file=True',
+                         'news_data_mi_selection_process 200 -1 extract_to_file=True']
 
-        # FIXME temp cmd
-        # news_data_basic_process(scale_length=7, extract_to_file=True)
-        # cmd = 'news_data_basic_process 7 False'.split()
+        cmd_export_mi_list = ['', 'mutual_information_export']
 
-        # cmd = ['mutual_information_export']
+        # [EXP]
+        # 1.a. scale and no scale, with vary features number
+        cmd_1a_scale = ['1a_scale',
+                        'news_data_mi_selection_process 100 1 extract_to_file=True',
+                        'news_data_mi_selection_process 200 1 extract_to_file=True',
+                        'news_data_mi_selection_process 400 1 extract_to_file=True',
+                        'news_data_mi_selection_process 600 1 extract_to_file=True',
+                        'news_data_mi_selection_process 1000 1 extract_to_file=True',
+                        'news_data_mi_selection_process 5000 1 extract_to_file=True',
+                        'news_data_mi_selection_process 7000 1 extract_to_file=True',
+                        'news_data_mi_selection_process 10000 1 extract_to_file=True']
+        cmd_1a_no_scale = ['1a_no_scale',
+                           'news_data_mi_selection_process 100 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 200 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 400 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 600 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 1000 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 5000 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 7000 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 10000 -1 extract_to_file=True']
 
-        # news_data_mi_selection_process(self, selected_word_number=300, scale_length=-1, extract_to_file=False)
-        cmd = 'news_data_mi_selection_process 10 7 extract_to_file=True'.split()
-
+        # list of cmd, with the first element is sub-folder name. This will be the sub dir of default dir.
+        # FIXME alter here
+        cmd_list = cmd_1a_scale
+        # only accept cmd called function from this list
         list_accepted_function = 'news_data_basic_process mutual_information_export ' \
                                  'news_data_mi_selection_process'.split()
 
-        if len(cmd) < Preprocessing20News.required_parameter:
-            raise SelfException.MismatchInputArgumentList('Preprocessing20News requires at least ' +
-                                                          str(Preprocessing20News.required_parameter) + ' arguments.')
-        if cmd[0] not in list_accepted_function:
-            raise SelfException.NonExitstingFunction('Preprocessing20News called function does not exist .')
+        sub_folder = cmd_list[0]
+        logger.info('Export data list: ' + sub_folder)
 
-        data = Preprocessing20News()
-        function_called = getattr(data, cmd[0])
+        for counter, cmd in enumerate(cmd_list[1:], start=1):
+            print(cmd)
+            logger.info(cmd)
 
-        if cmd[0] == 'news_data_basic_process':
-            function_called(scale_length=int(cmd[1]), extract_to_file=bool(cmd[2]))
-        elif cmd[0] == 'mutual_information_export':
-            function_called()
-        elif cmd[0] == 'news_data_mi_selection_process':
-            function_called(selected_word_number=int(cmd[1]), scale_length=int(cmd[2]), extract_to_file=bool(cmd[3]))
+            cmd = cmd.split()
+            # conditions checking
+            if len(cmd) < Preprocessing20News.required_parameter:
+                raise SelfException.MismatchInputArgumentList('Preprocessing20News requires at least ' +
+                                                              str(Preprocessing20News.required_parameter)+' arguments.')
+            if cmd[0] not in list_accepted_function:
+                raise SelfException.NonExitstingFunction('Preprocessing20News called function does not exist.')
+
+            data = Preprocessing20News(subfolder=sub_folder + str(counter))
+            function_called = getattr(data, cmd[0])
+
+            if cmd[0] == 'news_data_basic_process':
+                function_called(scale_length=int(cmd[1]), extract_to_file=bool(cmd[2]))
+            elif cmd[0] == 'mutual_information_export':
+                function_called()
+            elif cmd[0] == 'news_data_mi_selection_process':
+                function_called(selected_word_number=int(cmd[1]), scale_length=int(cmd[2]),extract_to_file=bool(cmd[3]))
 
         print('Done!')
+        logger.info('Done!')
 
     except SelfException.NonExitstingFunction as e:
         e.recall_traceback(sys.exc_info())
@@ -433,6 +480,7 @@ def main():
 
     except BaseException:
         raise
+
 
 if __name__ == '__main__':
     main()
