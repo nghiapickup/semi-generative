@@ -69,10 +69,11 @@ class Dataset(object):
                 raise SelfException.DatasetInitArgsNumberViolated('More input arguments than required.')
 
         except SelfException.DatasetInitArgsNumberViolated as e:
+            logger.exception('Dataset SelfException.DatasetInitArgsNumberViolated')
             e.recall_traceback(sys.exc_info())
 
         except BaseException:
-            print('Unknown error!')
+            logger.exception('Dataset BaseException')
             raise
 
     def load_from_csv(self, file_name):
@@ -150,10 +151,11 @@ class SslDataset(Dataset):
                 raise SelfException.DataTypeConstraint('SslDataset init: dataset datatype does not match')
 
         except SelfException.DataTypeConstraint as e:
+            logger.exception('SslDataset SelfException.DataTypeConstraint')
             e.recall_traceback(sys.exc_info())
 
         except BaseException:
-            print('Unknown error!')
+            logger.exception('SslDataset BaseException')
             raise
 
 
@@ -215,10 +217,11 @@ class MultinomialAllLabeled(object):
             self.predicted_label = np.zeros((self.data.test_number, 1))
 
         except SelfException.DataTypeConstraint as e:
+            logger.exception('MultinomialAllLabeled SelfException.DataTypeConstraint')
             e.recall_traceback(sys.exc_info())
 
         except BaseException:
-            print('Unknown error!')
+            logger.exception('MultinomialAllLabeled BaseException')
             raise
 
     def train(self):
@@ -270,10 +273,11 @@ class MultinomialEM(object):
             # note: matrix type here, in the same type with data.test_y
             self.predicted_label = np.zeros((self.data.test_number, 1))
         except SelfException.DataTypeConstraint as e:
+            logger.exception('MultinomialEM SelfException.DataTypeConstraint')
             e.recall_traceback(sys.exc_info())
 
         except BaseException:
-            print('Unknown error!')
+            logger.exception('MultinomialEM ')
             raise
 
     def train(self):
@@ -295,7 +299,7 @@ class MultinomialEM(object):
 
         # EM algorithm
         loop_count = 0
-        epsilon = 1e-8
+        epsilon = 1e-5
 
         # delta_0 estimate
         delta = np.zeros((l + u, c))
@@ -329,6 +333,7 @@ class MultinomialEM(object):
         # the same version of (theta, delta) take easier for tracking convergence estimate
         # (which is computed by the same (theta, delta))
         while abs(log_mle_new - log_mle_old) > epsilon:
+            logger.info('Diff: ' + str(log_mle_new - log_mle_old))
             loop_count += 1
             # M step
             self.prior_pr = np.zeros(c)
@@ -432,10 +437,11 @@ class MultinomialManyToOne(object):
             self.predicted_label = np.zeros((self.data.test_number, 1))
 
         except SelfException.DataTypeConstraint as e:
+            logger.exception('MultinomialManyToOne SelfException.DataTypeConstraint')
             e.recall_traceback(sys.exc_info())
 
         except BaseException:
-            print('Unknown error!')
+            logger.exception('MultinomialManyToOne BaseException')
             raise
 
     @staticmethod
@@ -500,7 +506,7 @@ class MultinomialManyToOne(object):
 
         # EM algorithm
         loop_count = 0
-        epsilon = 1e-8
+        epsilon = 1e-5
 
         # delta_0 estimate
         delta = np.zeros((l + u, m))
@@ -528,6 +534,7 @@ class MultinomialManyToOne(object):
         # the same version of (theta, delta) take easier for tracking convergence estimate
         # (which is computed by the same (theta, delta))
         while abs(log_mle_new - log_mle_old) > epsilon:
+            logger.info('Diff: ' + str(log_mle_new - log_mle_old))
             loop_count += 1
             # M step
             self.prior_pr = np.zeros(m)
@@ -631,10 +638,11 @@ class AgglomerativeTree(object):
                 raise SelfException.NonexistentMetric('Distance metric is nonexistent.')
 
         except SelfException.DataTypeConstraint as e:
+            logger.exception('AgglomerativeTree SelfException.DataTypeConstraint')
             e.recall_traceback(sys.exc_info())
 
         except BaseException:
-            print('Unknown error!')
+            logger.exception('AgglomerativeTree BasseException')
             raise
 
     @staticmethod
@@ -653,10 +661,11 @@ class AgglomerativeTree(object):
             return (np.square(x_mean - y_mean) / (2 * (x_mean + y_mean))).sum()
 
         except SelfException.DataTypeConstraint as e:
+            logger.exception('bin_bin_distance SelfException.DataTypeConstraint')
             e.recall_traceback(sys.exc_info())
 
         except BaseException:
-            print('Unknown error!')
+            logger.exception('bin_bin_distance')
             raise
 
     @staticmethod
@@ -679,10 +688,11 @@ class AgglomerativeTree(object):
             return np.absolute(x_mean - y_mean).sum()
 
         except SelfException.DataTypeConstraint as e:
+            logger.exception('match_distance SelfException.DataTypeConstraint')
             e.recall_traceback(sys.exc_info())
 
         except BaseException:
-            print('Unknown error!')
+            logger.exception('match_distance')
             raise
 
     def build_hierarchy_tree(self, data_list):
@@ -738,10 +748,11 @@ class AgglomerativeTree(object):
             return data_list[0]
 
         except SelfException.DataTypeConstraint as e:
+            logger.exception('build_hierarchy_tree SelfException.DataTypeConstraint')
             e.recall_traceback(sys.exc_info())
 
         except BaseException:
-            print('Unknown error!')
+            logger.exception('build_hierarchy_tree')
             raise
 
     def build_hierarchy_scheme(self):
@@ -848,6 +859,9 @@ class NewsEvaluation(object):
         :param random_seed: default = 0, random seed
         :return:
         """
+        logger.info('Start Evaluation - exp_feature_selection_1a')
+        logger.info('unlabeled_size: ' + str(unlabeled_size))
+        logger.info('n_splits: ' + str(n_splits))
         sub_folder_list = self.sub_folder_list_1a
         nb_result_filename = 'NB_result.log'
         em_result_filename = 'EM_result.log'
@@ -858,6 +872,7 @@ class NewsEvaluation(object):
                 test_folder_list = next(os.walk(self.default_dir + sub_folder + '/'))[1]
                 for test_folder in test_folder_list:
                     test_dir = self.default_dir + sub_folder + '/' + test_folder + '/'
+                    logger.info('START TEST: ' + test_dir)
                     origin_data = Dataset()
                     origin_data.load_from_csv([test_dir + self.map_filename,
                                         test_dir + self.train_filename, test_dir + self.test_filename])
@@ -875,6 +890,7 @@ class NewsEvaluation(object):
                         testcase_data.train_labeled_number = len(testcase_train_index)
 
                         # Test Naive Bayes
+                        logger.info('START: Naive Bayes')
                         nb_model = MultinomialAllLabeled(testcase_data)
                         nb_model.train()
                         nb_model.test()
@@ -887,8 +903,10 @@ class NewsEvaluation(object):
                             avg_NB_result.precision += temp_result.precision
                             avg_NB_result.recall += temp_result.recall
                             avg_NB_result.f1 += temp_result.f1
+                        logger.info('DONE: Naive Bayes')
 
                         # Test EM
+                        logger.info('START: EM')
                         em_model = MultinomialEM(testcase_data)
                         em_model.train()
                         em_model.test()
@@ -901,6 +919,8 @@ class NewsEvaluation(object):
                             avg_EM_result.precision += temp_result.precision
                             avg_EM_result.recall += temp_result.recall
                             avg_EM_result.f1 += temp_result.f1
+                        logger.info('DONE: EM')
+                        logger.info('Loop count: ' + str(em_model.EM_loop_count))
                     # compute average values
                     avg_NB_result.accuracy, avg_NB_result.precision, avg_NB_result.recall, avg_NB_result.f1 = \
                         np.divide(avg_NB_result.accuracy, n_splits), \
@@ -928,6 +948,7 @@ class NewsEvaluation(object):
                         f.writelines('\n')
 
         except BaseException:
+            logger.exception('exp_feature_selection_1a BaseException')
             raise
 
 
@@ -939,12 +960,12 @@ def main():
         #     list_file = input("command: ").split()
         evaluation = NewsEvaluation()
 
-        logger.info('Start Evaluation - exp_feature_selection_1a')
         evaluation.exp_feature_selection_1a()
 
         print('Done!')
         logger.info('Done!')
     except BaseException:
+        logger.exception('main() BaseException')
         raise
 
 

@@ -14,7 +14,7 @@ from sklearn import model_selection
 import logging
 
 logger = logging.getLogger(__name__)
-SelfException.LogHandler(__name__)
+SelfException.LogHandler('data_preprocessing')
 
 
 class PreprocessingSample(object):
@@ -249,6 +249,7 @@ class Preprocessing20News(object):
                 test_data[int(tup[0]) - 1, int(tup[1]) - 1] = tup[2]
             test_data[:, -1] = test_label_load[:]
         except BaseException:
+            logger.exception('news_data_basic_process BaseException')
             raise
 
         # scaling data with fix length
@@ -383,6 +384,7 @@ class Preprocessing20News(object):
                 test_data[int(tup[0]) - 1, int(tup[1]) - 1] = tup[2]
             test_data[:, -1] = test_label_load[:]
         except BaseException:
+            logger.exception('news_data_mi_selection_process BaseException')
             raise
 
         # scaling data with fix length
@@ -450,7 +452,6 @@ def main():
         logger.info('Export data list: ' + sub_folder)
 
         for counter, cmd in enumerate(cmd_list[1:], start=1):
-            print(cmd)
             logger.info(cmd)
 
             cmd = cmd.split()
@@ -475,10 +476,11 @@ def main():
         logger.info('Done!')
 
     except SelfException.NonExitstingFunction as e:
+        logger.exception('main() SelfException.NonExitstingFunction')
         e.recall_traceback(sys.exc_info())
-        raise
 
     except BaseException:
+        logger.exception('main() BaseException')
         raise
 
 
