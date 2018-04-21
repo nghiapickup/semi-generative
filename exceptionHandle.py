@@ -5,7 +5,7 @@ import os
 
 def LogHandler(name):
     """
-    return log Handler
+    Config log Handler
     :return:
     """
     logging.basicConfig(filename=name + '.log',

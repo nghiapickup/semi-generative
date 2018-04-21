@@ -13,7 +13,7 @@ import numpy as np
 from sklearn import model_selection
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('data_preprocessing')
 SelfException.LogHandler('data_preprocessing')
 
 
@@ -180,7 +180,7 @@ class Preprocessing20News(object):
         :return:
         """
         # the first exitst_ok shoule be False, this makes sure that all dir is empty before creating new data files
-        os.makedirs(os.path.dirname(self.file_list.train_output), exist_ok=False)
+        os.makedirs(os.path.dirname(self.file_list.train_output), exist_ok=True)
         with open(self.file_list.train_output, 'w') as f:
             np.savetxt(f, train_data[:], fmt="%s", delimiter=',')
 
@@ -293,49 +293,83 @@ class Preprocessing20News(object):
 
         data_load = np.loadtxt(self.file_list.train_input, dtype='int')
         data_label_load = np.loadtxt(self.file_list.train_label_input, dtype='int')
-        vocabulary_count = len(np.loadtxt(self.file_list.vocabulary_file, dtype='str'))
+        dict_number = len(np.loadtxt(self.file_list.vocabulary_file, dtype='str'))
         class_number = len(np.loadtxt(self.file_list.map_input,delimiter=','))
-        train_number = len(data_label_load)
 
-        word_conditional_class_pr = np.zeros((class_number, vocabulary_count))
+        # extract the occurrences of each word
+        # First, extract and group data by word_id. Then process on each word, get the unique value
+        # and add to word_class probability.
+        vocabulary_occurrences_by_class_pr = []
+        occurrences_count = []
+        # group data by word_id
+        vocabularies_count = np.zeros(dict_number, dtype=int)
+        # Be careful! Do not use np.unique here. It raises the problem with words are not counted
+        for word in data_load.T[1]:
+            vocabularies_count[word - 1] += 1
+        # group word_id index in dataset, because np.unique sorted unique value, so we get id from argsort
+        vocabularies_data_mass_index = data_load.T[1].argsort()
+        word_index_count = 0
+        for vocabulary_id in range(dict_number):
+            # indices of instances in data_load has word_id = vocabulary_id
+            instance_indices = vocabularies_data_mass_index[word_index_count:
+                                                                   word_index_count + vocabularies_count[vocabulary_id]]
+            word_index_count += vocabularies_count[vocabulary_id]
 
-        # Notice that word and data id in raw data file counting form 1
-        for (data_id, word_id, word_count) in data_load:
-            word_conditional_class_pr[data_label_load[data_id-1]-1][word_id-1] += 1
-        class_pr = np.zeros(class_number)
-        class_unique, class_count = np.unique(data_label_load, return_counts=True)
-        class_unique[:] -= 1
-        class_pr[class_unique] = class_count
-        word_pr = word_conditional_class_pr.sum(axis=0)
+            # get unique occurrences
+            unique_occurrences, inverse_occurrences = np.unique(data_load.T[2][instance_indices],return_inverse=True)
+            # add how many different occurrences of this vocabulary_id, use later for MI calc
+            occurrences_count.append(len(unique_occurrences))
 
-        class_pr = np.divide(class_pr, train_number)
-        word_pr = np.divide(word_pr, train_number)
-        word_conditional_class_pr = np.divide(word_conditional_class_pr, train_number)
-        word_mi_rank = np.zeros(vocabulary_count)
+            # update occurrence count to word_occurrence_by_class
+            # occurrences of this vocabulary
+            occurrences_count_of_vocabulary = np.zeros((len(unique_occurrences), class_number))
+            for counter, occurrence_id in enumerate(instance_indices):
+                # instance_indices and inverse_occurrences have same index
+                # Notice that word and data id in raw data file counting form 1
+                occurrences_count_of_vocabulary[
+                    inverse_occurrences[counter], data_label_load[data_load[occurrence_id, 0] -1] - 1] += 1
+            vocabulary_occurrences_by_class_pr.append(occurrences_count_of_vocabulary)
 
-        for w in range(vocabulary_count):
-            for c in range(class_number):
-                # check if class does not have any instance
-                # check if word does not have any instance, p(c,w) also = 0
-                # or word occurs in any class
-                # or there is no w in class c
-                if class_pr[c] != 0 and word_pr[w] != 0 and word_pr[w] != 1 and word_conditional_class_pr[c, w] != 0:
-                    word_mi_rank[w] += word_conditional_class_pr[c, w] * \
-                                    np.log2(word_conditional_class_pr[c, w] / (class_pr[c] * word_pr[w]))
-                    word_mi_rank[w] += (1 - word_conditional_class_pr[c, w]) * \
-                                    np.log2((1 - word_conditional_class_pr[c, w]) / (class_pr[c] * (1 - word_pr[w])))
+        vocabulary_occurrences_by_class_pr = np.vstack(vocabulary_occurrences_by_class_pr).T
+        all_occurrences_number = vocabulary_occurrences_by_class_pr.sum()
+        occurrence_pr = np.sum(vocabulary_occurrences_by_class_pr, axis=0)
+        class_pr = np.sum(vocabulary_occurrences_by_class_pr, axis=1)
+
+        vocabulary_occurrences_by_class_pr = np.divide(vocabulary_occurrences_by_class_pr, all_occurrences_number)
+        occurrence_pr = np.divide(occurrence_pr, all_occurrences_number)
+        class_pr = np.divide(class_pr, all_occurrences_number)
+
+        word_mi_rank = np.zeros(dict_number)
+
+        occurrence_count_id = 0
+        for vocabulary_id in range(dict_number):
+            for occurrence_id in range(occurrence_count_id, occurrence_count_id + occurrences_count[vocabulary_id]):
+                for class_id in range(class_number):
+                    # check if class does not have any instance
+                    # or word does not have any instance
+                    # or word occurs in any class
+                    # or there is no instance of this word in class c
+                    if class_pr[class_id] != 0 \
+                            and occurrence_pr[occurrence_id] != 0 \
+                            and occurrence_pr[occurrence_id] != 1 \
+                            and vocabulary_occurrences_by_class_pr[class_id, occurrence_id] != 0:
+                        word_mi_rank[vocabulary_id] += \
+                            vocabulary_occurrences_by_class_pr[class_id, occurrence_id] * \
+                                        np.log2(vocabulary_occurrences_by_class_pr[class_id, occurrence_id] /
+                                                (class_pr[class_id] * occurrence_pr[occurrence_id]))
+            occurrence_count_id += occurrences_count[vocabulary_id]
 
         # export to file
         with open(self.mi_word_rank_file, 'w') as f:
-            np.savetxt(f, word_mi_rank.argsort()[::-1][:vocabulary_count], fmt="%s")
+            np.savetxt(f, word_mi_rank.argsort()[::-1][:dict_number], fmt="%s")
 
         # for test case
-        return (class_pr, word_pr, word_conditional_class_pr, word_mi_rank)
+        return class_pr, occurrence_pr, vocabulary_occurrences_by_class_pr, word_mi_rank
 
     def news_data_mi_selection_process(self, selected_word_number=300, scale_length=-1, extract_to_file=False):
         """
         Tokenize 20news data, only stemming, and choosing top selected_word_number with highest mutual information score.
-        the data is used here is by-date and was splitted in train-test as .6-.4
+        the data using here is by-date version and is splitted in train-test as .6-.4
         :param selected_word_number: number of features selected
         :param scale_length: default length of scaling for data, default is -1: no scale
         :param extract_to_file: bool, flag to raise extract processed data to files, default is true
@@ -349,7 +383,7 @@ class Preprocessing20News(object):
         vocabulary_load = np.loadtxt(self.file_list.vocabulary_file, dtype='str')
         mi_rank_list_load = np.loadtxt(self.mi_word_rank_file, dtype='int')
 
-        # re-index class to number 0, 1, ..., c
+        # re-index class to number 0, 1, ..., c-1
         index_map = {}
         for i in range(len(map_load)):
             index_map[map_load[i]] = i
@@ -358,7 +392,7 @@ class Preprocessing20News(object):
         for index, val in enumerate(test_label_load):
             test_label_load[index] = index_map.get(val)
 
-        # data farm
+        # data frame
         temp_feature_number = len(vocabulary_load)
         train_number = len(train_label_load)
         train_data = np.zeros((train_number, temp_feature_number + 1))
@@ -387,21 +421,21 @@ class Preprocessing20News(object):
             logger.exception('news_data_mi_selection_process BaseException')
             raise
 
-        # scaling data with fix length
+        # only pick data in mi rank list
+        # TODO: exception when selected_word_number > vocabulary size
+        pick_id = mi_rank_list_load[:selected_word_number]
+        pick_id = np.append(pick_id, -1) # add document class
+        # noting here the order of word is now follow the MI rank list
+        train_data = train_data.T[pick_id].T
+        test_data = test_data.T[pick_id].T
+
+        # scaling data with fix length,scale must must be done after pick data from MI rank list
         # a = (a.T * scale / a.sum(axis=1)).T
         # We omit the label a.T[:-1].T before calculating
         # * Should do this before remove feature. It makes sure that there is no zero vector
         if scale_length > 0:
             train_data.T[:-1] = train_data.T[:-1] * scale_length / train_data.T[:-1].sum(axis=0)
             test_data.T[:-1] = test_data.T[:-1] * scale_length / test_data.T[:-1].sum(axis=0)
-
-        # only pick data in mi rank list
-        # TODO: exception when selected_word_number > vocabulary size
-        pick_id = mi_rank_list_load[:selected_word_number]
-        pick_id = np.append(pick_id, -1) # add label
-        # noting here the order of word is now follow the MI rank list
-        train_data = train_data.T[pick_id].T
-        test_data = test_data.T[pick_id].T
 
         # extract to files
         if extract_to_file:
@@ -443,7 +477,7 @@ def main():
 
         # list of cmd, with the first element is sub-folder name. This will be the sub dir of default dir.
         # FIXME alter here
-        cmd_list = cmd_1a_scale
+        cmd_list = cmd_export_mi_list
         # only accept cmd called function from this list
         list_accepted_function = 'news_data_basic_process mutual_information_export ' \
                                  'news_data_mi_selection_process'.split()

@@ -15,9 +15,8 @@ from namedlist import namedlist
 from sklearn import metrics
 from sklearn import model_selection
 import exceptionHandle as SelfException
-import Data.data_preprocessing as data_process
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('NBText')
 SelfException.LogHandler('NBText')
 
 
@@ -344,12 +343,10 @@ class MultinomialEM(object):
             for j in range(c):
                 for i in range(l):
                     self.prior_pr[j] += delta[i, j]
-                    for k in range(d):
-                        self.word_pr[j, k] += delta[i, j] * self.data.train_xl[i, k]
+                    self.word_pr[j] =self.word_pr[j] + delta[i, j] * self.data.train_xl[i]
                 for i in range(u):
                     self.prior_pr[j] += delta[i + l, j]
-                    for k in range(d):
-                        self.word_pr[j, k] += delta[i + l, j] * self.data.train_xu[i, k]
+                    self.word_pr[j] = self.word_pr[j] + delta[i + l, j] * self.data.train_xu[i]
                 #  class prior probability
                 self.prior_pr[j] = (self.prior_pr[j] + 1) / float(l + u + c)
 
@@ -493,8 +490,7 @@ class MultinomialManyToOne(object):
             label = int(self.data.train_yl[i])
             for j in range(self.component_count_cumulative[label], self.component_count_cumulative[label + 1]):
                 self.prior_pr[j] += delta[i, j]
-                for k in range(d):
-                    self.word_pr[j, k] += self.data.train_xl[i, k] * delta[i, j]
+                self.word_pr[j] = self.word_pr[j] + delta[i, j] * self.data.train_xl[i]
         # add-one smoothing in use
         #  class prior probability
         self.prior_pr[:] += 1
@@ -555,12 +551,10 @@ class MultinomialManyToOne(object):
             for j in range(m):
                 for i in range(l):
                     self.prior_pr[j] += delta[i, j]
-                    for k in range(d):
-                        self.word_pr[j, k] += delta[i, j] * self.data.train_xl[i, k]
+                    self.word_pr[j] = self.word_pr[j] + delta[i, j] * self.data.train_xl[i]
                 for i in range(u):
                     self.prior_pr[j] += delta[i + l, j]
-                    for k in range(d):
-                        self.word_pr[j, k] += delta[i + l, j] * self.data.train_xu[i, k]
+                    self.word_pr[j] = self.word_pr[j] + delta[i + l, j] * self.data.train_xu[i]
                 #  class prior probability
                 self.prior_pr[j] = (self.prior_pr[j] + 1) / float(l + u + m)
 
@@ -846,7 +840,7 @@ class NewsEvaluation(object):
         in corresponding with difference number of selected word features.
 
         Expected:
-        - The upper hand of scaling data
+        - The upper performance of scaling data
         - Finding a good range of word number should be chosen
 
         Data Reading:

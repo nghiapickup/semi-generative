@@ -14,6 +14,10 @@ import exceptionHandle as SelfException
 import MMM.NBText as nb
 import Data.data_preprocessing as data_pre
 import Data.origin_data_splitter as origin_data
+import logging
+
+logger = logging.getLogger('generative_unittest')
+SelfException.LogHandler('generative_unittest')
 
 #
 # Data
@@ -33,11 +37,8 @@ class Preprocessing20NewsTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-
         cls.preprocessing = data_pre.Preprocessing20News()
         cls.preprocessing.file_list = cls.demo_file_list
-        # extract mi rank file first for  test_news_data_mi_selection_process
-        cls.preprocessing.mutual_information_export()
 
     def test_news_data_basic_process(self):
         """
@@ -73,20 +74,21 @@ class Preprocessing20NewsTest(unittest.TestCase):
         This test checks the element lists of MI calculating.
         :return:
         """
-        class_pr_expected = np.asarray([0., 1/3, 1/3, 0., 1/3, 0., 0., 0., 0., 0., 0.,
+        class_pr_expected = np.asarray([0., 9/31, 9/31, 0., 13/31, 0., 0., 0., 0., 0., 0.,
                                         0., 0., 0., 0., 0., 0., 0., 0., 0.])
-        word_pr_expected = np.asarray([1/3, 1., 2/3, 1/6, 1/3,
-                                       1/3, 2/3, 1/6, 5/6, 2/3])
-        mi_rank_list_expected = np.asarray([1.584962500721156, 0.0, 6.624767660309072, 1.584962500721156,
-                                            3.3731384929212496, 3.3731384929212496, 6.6247676603090735,
-                                            1.584962500721156, 8.088220835496804, 6.624767660309072])
-        mi_rank_id_list_expected = np.asarray([8, 6, 9, 2, 5, 4, 7, 3, 0, 1])
+        occurrence_pr_expected = np.asarray([1/31, 1/31, 3/31, 1/31, 1/31, 1/31, 1/31, 1/31, 1/31, 1/31, 1/31, 1/31,
+                                       1/31, 2/31, 4/31, 1/31, 1/31, 2/31, 1/31, 1/31, 1/31, 2/31, 1/31])
+        mi_rank_list_expected = np.asarray([0.08088752208037309, 0.15773261026149513, 0.21311517803482166,
+                                            0.04044376104018654, 0.09800090003839826, 0.033484771006140196,
+                                            0.002453412980022317, 0.04044376104018654, 0.20615618800077534,
+                                            0.1485990490025636])
+        mi_rank_id_list_expected = np.asarray([2, 8, 1, 9, 4, 0, 7, 3, 5, 6])
 
-        (class_pr, word_pr, word_conditional_class_pr, word_mi_rank) = self.preprocessing.mutual_information_export()
+        (class_pr, occurrence_pr, word_conditional_class_pr, word_mi_rank) = self.preprocessing.mutual_information_export()
 
         # test basic calculation first
         self.assertTrue((class_pr_expected == class_pr).all())
-        self.assertTrue((word_pr_expected == word_pr).all())
+        self.assertTrue((occurrence_pr_expected == occurrence_pr).all())
         self.assertTrue((word_mi_rank == mi_rank_list_expected).all())
 
         # test mi rank list
@@ -150,6 +152,10 @@ class Preprocessing20NewsTest(unittest.TestCase):
 
         :return:
         """
+        mi_rank_list = np.array([8, 6, 9, 2, 5, 4, 7, 3, 0, 1])
+        with open(data_pre.Preprocessing20News.mi_word_rank_file, 'w') as f:
+            np.savetxt(f, mi_rank_list[:], fmt="%s")
+
         loaded_train_expected = np.asarray([[3., 1., 9., 10., 1., 4.],
                                             [0., 1., 0., 0., 0., 4.],
                                             [8., 1., 5., 3., 1., 1.],
@@ -412,7 +418,7 @@ class AgglomerativeTreeTest(unittest.TestCase):
 
         * bin_to_bin distance
         Agglomerative tree and merged distances
-            Splitter id		  0   7   1   5	  2	  6   4	  8	  3
+            Splitter id     0   7   1   5	  2	  6   4	  8	  3
                               |   |   |	  |   |   |   |   |   |
                             0	1	2	3	4	5	8	9	6	7
                             |	|	|	|	|	|	|	|	|	|
@@ -563,7 +569,7 @@ class DataTestGenerator(object):
             e.recall_traceback(sys.exc_info())
 
         except BaseException:
-            print('Unknown error!')
+            logger.exception('DataTestGenerator __init__ BaseException')
             raise
 
     def csv_export(self, pre_dir, export_name_list=None, extend_mode=False):
@@ -644,12 +650,11 @@ class MultinomialAllLabeledTest(unittest.TestCase):
 
     def test_argument_estimate(self):
         # show info
-        print('Multinomial AllLabeled Test')
-        print('acc', metrics.accuracy_score(self.model.data.test_y, self.model.predicted_label))
-        print('prior pr')
-        print(self.model.prior_pr)
-        print('word pr')
-        print(self.model.word_pr)
+        logger.info('acc' + str(metrics.accuracy_score(self.model.data.test_y, self.model.predicted_label)))
+        logger.info('prior pr')
+        logger.info(str(self.model.prior_pr))
+        logger.info('word pr')
+        logger.info(str(self.model.word_pr))
 
         # test prior pr
         epsilon = 0.01
@@ -713,13 +718,12 @@ class MultinomialEMTest(unittest.TestCase):
 
     def test_argument_estimate(self):
         # show info
-        print('Multinomial EM Test')
-        print('EM loops: ', self.model.EM_loop_count)
-        print('acc', metrics.accuracy_score(self.model.data.test_y, self.model.predicted_label))
-        print('prior pr')
-        print(self.model.prior_pr)
-        print('word pr')
-        print(self.model.word_pr)
+        logger.info('EM loops: ' + str(self.model.EM_loop_count))
+        logger.info('acc' + str(metrics.accuracy_score(self.model.data.test_y, self.model.predicted_label)))
+        logger.info('prior pr')
+        logger.info(str(self.model.prior_pr))
+        logger.info('word pr')
+        logger.info(str(self.model.word_pr))
 
         # test prior pr
         epsilon = 0.01
@@ -834,13 +838,12 @@ class MultinomialManyToOneTest(unittest.TestCase):
         model.test()
 
         # show info
-        print('Multinomial ManyToOne one-one Test')
-        print('EM loops: ', model.EM_loop_count)
-        print('acc', metrics.accuracy_score(model.data.test_y, model.predicted_label))
-        print('prior pr')
-        print(model.prior_pr)
-        print('word pr')
-        print(model.word_pr)
+        logger.info('EM loops: ' + str(model.EM_loop_count))
+        logger.info('acc' + str(metrics.accuracy_score(model.data.test_y, model.predicted_label)))
+        logger.info('prior pr')
+        logger.info(str(model.prior_pr))
+        logger.info('word pr')
+        logger.info(str(model.word_pr))
 
         # test prior pr
         epsilon = 0.01
@@ -908,17 +911,16 @@ class MultinomialManyToOneTest(unittest.TestCase):
                 expected_word_pr[2 * counter + 1] = self.test_generator_1.list_word_pr_list[counter]
 
         # show info
-        print('Multinomial ManyToOne many_one Test')
-        print('EM loops: ', model.EM_loop_count)
-        print('acc', metrics.accuracy_score(model.data.test_y, model.predicted_label))
-        print('prior pr')
-        print(model.prior_pr)
-        print('expected prior pr')
-        print(expected_prior_pr)
-        print('word pr')
-        print(model.word_pr)
-        print('expected word pr')
-        print(expected_word_pr)
+        logger.info('EM loops: ' + str(model.EM_loop_count))
+        logger.info('acc' + str(metrics.accuracy_score(model.data.test_y, model.predicted_label)))
+        logger.info('prior pr')
+        logger.info(str(model.prior_pr))
+        logger.info('expected prior pr')
+        logger.info(str(expected_prior_pr))
+        logger.info('word pr')
+        logger.info(str(model.word_pr))
+        logger.info('expected word pr')
+        logger.info(str(expected_word_pr))
 
         # test prior pr
         epsilon = 0.01
@@ -1005,11 +1007,12 @@ def main():
 
     evaluation_test = [NewsEvaluationTest]
 
-    temp_test = []
+    temp_test = [MultinomialEMTest, MultinomialManyToOneTest]
 
     # list of all desired tests
-    require_test = 'mmm_test data_preprocessing_test evaluation_test'
-    # require_test = 'temp_test'
+    # require_test = 'mmm_test data_preprocessing_test evaluation_test'
+    require_test = 'temp_test'
+    logger.info('START UNITTEST: ' + require_test)
 
     # print('Current supported test: [ MMM ]')
     # require_test = input("Test list: ")
