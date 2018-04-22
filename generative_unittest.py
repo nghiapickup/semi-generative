@@ -940,15 +940,17 @@ class MultinomialManyToOneTest(unittest.TestCase):
 # Evaluation Test
 #
 class NewsEvaluationTest(unittest.TestCase):
-    __doc__ = 'This test mostly only create test data and no exception is raised'
+    __doc__ = 'This test mostly only create test data and no exception is raised' \
+              'And you should hand check the exported folders are same as expected®'
 
     default_export_filename_list = ['news.map.csv', 'news.train.csv', 'news.test.csv']
 
     @classmethod
     def setUpClass(cls):
         cls.sub_folder_1a = ['1a_scale/', '1a_no_scale/']
+        cls.sub_folder_1b = ['1b_scale/']
 
-    def test_exp_feature_selection_1a(self):
+    def _exp_feature_selection_1a(self):
         exception_raise = False
         try:
             # use the same data generator
@@ -982,10 +984,48 @@ class NewsEvaluationTest(unittest.TestCase):
             evaluation.exp_feature_selection_1a(unlabeled_size=400, n_splits=3)
         except:
             exception_raise = True
+            raise
 
         self.assertFalse(exception_raise, 'test_exp_feature_selection_1a: Exception raised!')
 
+    def test_exp_cooperate_unlabeled_1b(self):
+        exception_raise = False
+        try:
+            # use the same data generator
+            test_generator = DataTestGenerator(
+                np.vstack(
+                    [np.asarray([0.25, 0.25, 0.25, 0.25]),
+                     np.asarray([0.3, 0.4, 0.2, 0.1]),
+                     np.asarray([0.2, 0.2, 0.2, 0.4]),
+                     np.asarray([0.1, 0.3, 0.3, 0.3])]),
+                np.asarray([0.2, 0.5, 0.15, 0.15]),
+                train_size=1000,
+                total_word_count=100,
+                test_size_per_class=10)
+            # data generator
+            for sub_folder in self.sub_folder_1b:
+                for test_count in range(2):
+                    # only 2 cases per sub-folder
+                    # dir: MMM/test_generator.default_export_path/sub_folder/test_count/self.default_export_filename_list
 
+                    test_dir = sub_folder + str(test_count) + '/'
+                    os.makedirs(os.path.dirname('MMM/' + test_generator.default_export_path + test_dir), exist_ok=True)
+                    # update filename_list with sub_folder/test_count folder
+                    filename_list =[test_dir + self.default_export_filename_list[0],
+                                    test_dir + self.default_export_filename_list[1],
+                                    test_dir + self.default_export_filename_list[2]]
+                    test_generator.csv_export('MMM/', export_name_list=filename_list)
+
+            # test model
+            evaluation = nb.NewsEvaluation()
+            evaluation.default_dir = 'MMM/test_data/'
+            evaluation.approximate_labeled_sizes_1b = [10, 20, 30, 50]
+            evaluation.exp_cooperate_unlabeled_1b(unlabeled_size=400, n_tries=3)
+        except:
+            exception_raise = True
+            raise
+
+        self.assertFalse(exception_raise, 'test_exp_cooperate_unlabeled_1b: Exception raised!')
 #
 # main
 #
@@ -1007,7 +1047,7 @@ def main():
 
     evaluation_test = [NewsEvaluationTest]
 
-    temp_test = [MultinomialEMTest, MultinomialManyToOneTest]
+    temp_test = []
 
     # list of all desired tests
     # require_test = 'mmm_test data_preprocessing_test evaluation_test'

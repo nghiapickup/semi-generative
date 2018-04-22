@@ -146,6 +146,7 @@ file_location_list = collections.namedtuple('file_location_list', 'vocabulary_fi
                                                                   'test_input, test_label_input, '
                                                                   'map_output, train_output, test_output, data_info')
 
+
 class Preprocessing20News(object):
     __doc__ = '20News data pre-processing.'
 
@@ -432,10 +433,10 @@ class Preprocessing20News(object):
         # scaling data with fix length,scale must must be done after pick data from MI rank list
         # a = (a.T * scale / a.sum(axis=1)).T
         # We omit the label a.T[:-1].T before calculating
-        # * Should do this before remove feature. It makes sure that there is no zero vector
         if scale_length > 0:
-            train_data.T[:-1] = train_data.T[:-1] * scale_length / train_data.T[:-1].sum(axis=0)
-            test_data.T[:-1] = test_data.T[:-1] * scale_length / test_data.T[:-1].sum(axis=0)
+            # it may occur that there is zero vector after remove features.
+            train_data.T[:-1] = np.nan_to_num(train_data.T[:-1] * scale_length / train_data.T[:-1].sum(axis=0))
+            test_data.T[:-1] = np.nan_to_num(test_data.T[:-1] * scale_length / test_data.T[:-1].sum(axis=0))
 
         # extract to files
         if extract_to_file:
@@ -474,6 +475,10 @@ def main():
                            'news_data_mi_selection_process 5000 -1 extract_to_file=True',
                            'news_data_mi_selection_process 7000 -1 extract_to_file=True',
                            'news_data_mi_selection_process 10000 -1 extract_to_file=True']
+
+        # 1.b. 400 features, scale length 5s
+        cmd_1b_400_scale = ['1b_scale',
+                            'news_data_mi_selection_process 400 5 extract_to_file=True']
 
         # list of cmd, with the first element is sub-folder name. This will be the sub dir of default dir.
         # FIXME alter here

@@ -781,6 +781,11 @@ class NewsEvaluation(object):
         # exp_feature_selection_1a
         self.sub_folder_list_1a = '1a_scale 1a_no_scale'.split()
 
+        # exp_cooperation_unlabeled_1b
+        self.sub_folder_list_1b = '1b_scale'.split()
+
+        self.approximate_labeled_sizes_1b = np.array([100, 200, 500, 700, 1000, 1500])
+
     # Note for the returned agglomerative tree
     # 1. there are 2 arguments for many_to_one :
     # First is the list count of component per each class
@@ -795,7 +800,7 @@ class NewsEvaluation(object):
         Export report
         :param model:
         :param file_name: file name
-        :param extend: bool, set true if extend train and test files for test many to one
+        :param extend_file: bool, set true if extend train and test files while export result
         :return:
         """
         label = model.data.class_name_list
@@ -829,6 +834,24 @@ class NewsEvaluation(object):
                                            precision=detail[0].round(4), recall=detail[1].round(4),
                                            f1=detail[2].round(4), support=detail[3])
 
+    def report_avg_report(self, file_name, title, result):
+        """
+        export avg(summary) result (accuracy, precision, recall, f1)
+        The export file will be extend to write from the end
+        :param file_name: string, file to export
+        :param title: string, title to print
+        :param result: result_return_form, result to export
+        :return:
+        """
+        with open(file_name, 'a') as f:
+            f.writelines('\n' + title)
+            f.writelines('\n Accuracy ' + str(result.accuracy))
+            f.writelines('\n Precision ' + str(result.precision))
+            f.writelines('\n Recall ' + str(result.recall))
+            f.writelines('\n f1 ' + str(result.f1))
+            f.writelines('\n support ' + str(result.support))
+            f.writelines('\n')
+
     # I. The advantage of unlabeled data
     # a) test feature selection
     def exp_feature_selection_1a(self, unlabeled_size=6000, n_splits=5, random_seed=0):
@@ -836,7 +859,9 @@ class NewsEvaluation(object):
         exp the feature selection. There are 2 things we need to experiment:
         1. Scaling data
         2. Feature selection using Mutual Information (MI) word rank
-        the method is comparing NB and EM with 2 types of data: scaling and non-scaling
+
+        Exp Model
+        NB and EM with 2 types of data: scaling and non-scaling
         in corresponding with difference number of selected word features.
 
         Expected:
@@ -857,8 +882,8 @@ class NewsEvaluation(object):
         logger.info('unlabeled_size: ' + str(unlabeled_size))
         logger.info('n_splits: ' + str(n_splits))
         sub_folder_list = self.sub_folder_list_1a
-        nb_result_filename = 'NB_result.log'
-        em_result_filename = 'EM_result.log'
+        nb_result_filename = 'NB_1a_result.log'
+        em_result_filename = 'EM_1a_result.log'
         try:
             # this default exp uses 6000 data as unlabeled data, the remaining is split into 5 non-overlap parts with size 1000
             for sub_folder in sub_folder_list:
@@ -897,6 +922,7 @@ class NewsEvaluation(object):
                             avg_NB_result.precision += temp_result.precision
                             avg_NB_result.recall += temp_result.recall
                             avg_NB_result.f1 += temp_result.f1
+                            avg_NB_result.support += temp_result.support
                         logger.info('DONE: Naive Bayes')
 
                         # Test EM
@@ -913,36 +939,149 @@ class NewsEvaluation(object):
                             avg_EM_result.precision += temp_result.precision
                             avg_EM_result.recall += temp_result.recall
                             avg_EM_result.f1 += temp_result.f1
+                            avg_EM_result.support += temp_result.support
                         logger.info('DONE: EM')
                         logger.info('Loop count: ' + str(em_model.EM_loop_count))
                     # compute average values
-                    avg_NB_result.accuracy, avg_NB_result.precision, avg_NB_result.recall, avg_NB_result.f1 = \
+                    avg_NB_result.accuracy, avg_NB_result.precision, \
+                    avg_NB_result.recall, avg_NB_result.f1, avg_NB_result.support = \
                         np.divide(avg_NB_result.accuracy, n_splits), \
                         np.divide(avg_NB_result.precision, n_splits), \
                         np.divide(avg_NB_result.recall, n_splits), \
-                        np.divide(avg_NB_result.f1, n_splits)
-                    avg_EM_result.accuracy, avg_EM_result.precision, avg_EM_result.recall, avg_EM_result.f1 = \
+                        np.divide(avg_NB_result.f1, n_splits), \
+                        np.divide(avg_NB_result.support, n_splits)
+                    avg_EM_result.accuracy, avg_EM_result.precision, \
+                    avg_EM_result.recall, avg_EM_result.f1, avg_EM_result.support = \
                         np.divide(avg_EM_result.accuracy, n_splits), \
                         np.divide(avg_EM_result.precision, n_splits), \
                         np.divide(avg_EM_result.recall, n_splits), \
-                        np.divide(avg_EM_result.f1, n_splits)
-                    with open(test_dir + nb_result_filename, 'a') as f:
-                        f.writelines('\n AVERAGE NB')
-                        f.writelines('\n Accuracy ' + str(avg_NB_result.accuracy))
-                        f.writelines('\n Precision ' + str(avg_NB_result.precision))
-                        f.writelines('\n Recall ' + str(avg_NB_result.recall))
-                        f.writelines('\n f1 ' + str(avg_NB_result.f1))
-                        f.writelines('\n')
-                    with open(test_dir + em_result_filename, 'a') as f:
-                        f.writelines('\n AVERAGE EM')
-                        f.writelines('\n Accuracy ' + str(avg_EM_result.accuracy))
-                        f.writelines('\n Precision ' + str(avg_EM_result.precision))
-                        f.writelines('\n Recall ' + str(avg_EM_result.recall))
-                        f.writelines('\n f1 ' + str(avg_EM_result.f1))
-                        f.writelines('\n')
+                        np.divide(avg_EM_result.f1, n_splits), \
+                        np.divide(avg_EM_result.support, n_splits)
+                    self.report_avg_report(test_dir + nb_result_filename, 'AVERAGE NB', avg_NB_result)
+                    self.report_avg_report(test_dir + em_result_filename, 'AVERAGE EM', avg_EM_result)
 
         except BaseException:
             logger.exception('exp_feature_selection_1a BaseException')
+            raise
+
+    def exp_cooperate_unlabeled_1b(self, unlabeled_size=6000, n_tries=5, random_seed=0):
+        """
+        Exps are taking here:
+        1. Test with fix large amount of unlabeled data, vary types of labeled size
+        The size of labeled size is defined by number of fold split of train data (after split unlabeled data)
+
+        Exp Model
+        NB and EM
+
+        Expected:
+        - The advantage of unlabeled data
+
+        Data Reading:
+        The func will scan default_dir location and process through all sub-folder in sub_folder_list (one-by-one).
+        In each sub-folder contains all test cases for one exp.
+        The process will perform the algorithm and return the result file in the same folder of each test case.
+        :param unlabeled_size: int, default=6000, size of unlabeled data
+        :param n_tries: int, default=5, number of re-train times
+        :param random_seed: int, default=0, seed of random generator
+        :return:
+        """
+        logger.info('Start Evaluation - exp_cooperation_unlabeled_1b')
+        logger.info('unlabeled_size: ' + str(unlabeled_size))
+        sub_folder_list = self.sub_folder_list_1b
+        nb_result_filename = 'NB_1b_result.log'
+        em_result_filename = 'EM_1b_result.log'
+        # 1500 is fix for 5 sub-testcase (7500 data) as default
+        # these number are only the approximate expected instances, the exact ones based on the Kfold splitter
+
+        try:
+            # this default exp uses 6000 data as unlabeled data,
+            # the remaining is split into vary non-overlap parts with size 1000
+            for sub_folder in sub_folder_list:
+                # get all tests in sub-folder
+                test_folder_list = next(os.walk(self.default_dir + sub_folder + '/'))[1]
+                for test_folder in test_folder_list:
+                    test_dir = self.default_dir + sub_folder + '/' + test_folder + '/'
+                    logger.info('START TEST: ' + test_dir)
+                    origin_data = Dataset()
+                    origin_data.load_from_csv([test_dir + self.map_filename,
+                                               test_dir + self.train_filename, test_dir + self.test_filename])
+                    origin_ssl_data = SslDataset(origin_data, unlabeled_size=unlabeled_size, random_seed=random_seed)
+
+                    for sub_train_number in self.approximate_labeled_sizes_1b:
+                        n_splits = round(len(origin_ssl_data.train_xl) / float(sub_train_number))
+                        skf = model_selection.StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+
+                        # split train data into 5 overlap parts and get the average
+                        avg_NB_result = None
+                        avg_EM_result = None
+                        nb_sub_result_filename = str(sub_train_number) + nb_result_filename
+                        em_sub_result_filename = str(sub_train_number) + em_result_filename
+
+                        loop_count = 0
+                        for _, testcase_train_index in skf.split(origin_ssl_data.train_xl, origin_ssl_data.train_yl):
+                            loop_count += 1
+                            if loop_count > n_tries: break
+
+                            # TODO Check the copied elements
+                            testcase_data = SslDataset(origin_ssl_data)
+                            testcase_data.train_xl = origin_ssl_data.train_xl[testcase_train_index]
+                            testcase_data.train_yl = origin_ssl_data.train_yl[testcase_train_index]
+                            testcase_data.train_labeled_number = len(testcase_train_index)
+
+                            # Test Naive Bayes
+                            logger.info('START: Naive Bayes')
+                            nb_model = MultinomialAllLabeled(testcase_data)
+                            nb_model.train()
+                            nb_model.test()
+                            temp_result = self.report_export(nb_model, test_dir + nb_sub_result_filename,
+                                                             extend_file=True, detail_return=True)
+                            if avg_NB_result is None:
+                                avg_NB_result = temp_result
+                            else:
+                                avg_NB_result.accuracy += temp_result.accuracy
+                                avg_NB_result.precision += temp_result.precision
+                                avg_NB_result.recall += temp_result.recall
+                                avg_NB_result.f1 += temp_result.f1
+                                avg_NB_result.support += temp_result.support
+                            logger.info('DONE: Naive Bayes')
+
+                            # Test EM
+                            logger.info('START: EM')
+                            em_model = MultinomialEM(testcase_data)
+                            em_model.train()
+                            em_model.test()
+                            temp_result = self.report_export(em_model, test_dir + em_sub_result_filename,
+                                                             extend_file=True, detail_return=True)
+                            if avg_EM_result is None:
+                                avg_EM_result = temp_result
+                            else:
+                                avg_EM_result.accuracy += temp_result.accuracy
+                                avg_EM_result.precision += temp_result.precision
+                                avg_EM_result.recall += temp_result.recall
+                                avg_EM_result.f1 += temp_result.f1
+                                avg_EM_result.support += temp_result.support
+                            logger.info('DONE: EM')
+                            logger.info('Loop count: ' + str(em_model.EM_loop_count))
+                        # compute average values
+                        avg_NB_result.accuracy, avg_NB_result.precision, \
+                        avg_NB_result.recall, avg_NB_result.f1, avg_NB_result.support = \
+                            np.divide(avg_NB_result.accuracy, n_tries), \
+                            np.divide(avg_NB_result.precision, n_tries), \
+                            np.divide(avg_NB_result.recall, n_tries), \
+                            np.divide(avg_NB_result.f1, n_tries), \
+                            np.divide(avg_NB_result.support, n_tries)
+                        avg_EM_result.accuracy, avg_EM_result.precision, \
+                        avg_EM_result.recall, avg_EM_result.f1, avg_EM_result.support = \
+                            np.divide(avg_EM_result.accuracy, n_tries), \
+                            np.divide(avg_EM_result.precision, n_tries), \
+                            np.divide(avg_EM_result.recall, n_tries), \
+                            np.divide(avg_EM_result.f1, n_tries), \
+                            np.divide(avg_EM_result.support, n_tries)
+                        self.report_avg_report(test_dir + nb_sub_result_filename, 'AVERAGE NB', avg_NB_result)
+                        self.report_avg_report(test_dir + em_sub_result_filename, 'AVERAGE EM', avg_EM_result)
+
+        except BaseException:
+            logger.exception('exp_cooperate_unlabeled_1b BaseException')
             raise
 
 
@@ -955,6 +1094,7 @@ def main():
         evaluation = NewsEvaluation()
 
         evaluation.exp_feature_selection_1a()
+        # evaluation.exp_cooperate_unlabeled_1b
 
         print('Done!')
         logger.info('Done!')
