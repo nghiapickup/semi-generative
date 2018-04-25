@@ -74,15 +74,33 @@ class Preprocessing20NewsTest(unittest.TestCase):
         This test checks the element lists of MI calculating.
         :return:
         """
-        class_pr_expected = np.asarray([0., 9/31, 9/31, 0., 13/31, 0., 0., 0., 0., 0., 0.,
+        class_pr_expected = np.asarray([0., 20/60, 20/60, 0., 20/60, 0., 0., 0., 0., 0., 0.,
                                         0., 0., 0., 0., 0., 0., 0., 0., 0.])
-        occurrence_pr_expected = np.asarray([1/31, 1/31, 3/31, 1/31, 1/31, 1/31, 1/31, 1/31, 1/31, 1/31, 1/31, 1/31,
-                                       1/31, 2/31, 4/31, 1/31, 1/31, 2/31, 1/31, 1/31, 1/31, 2/31, 1/31])
-        mi_rank_list_expected = np.asarray([0.08088752208037309, 0.15773261026149513, 0.21311517803482166,
-                                            0.04044376104018654, 0.09800090003839826, 0.033484771006140196,
-                                            0.002453412980022317, 0.04044376104018654, 0.20615618800077534,
-                                            0.1485990490025636])
-        mi_rank_id_list_expected = np.asarray([2, 8, 1, 9, 4, 0, 7, 3, 5, 6])
+        occurrence_pr_expected = np.asarray([1./60, 1./60, 4./60, 3./60, 1./60, 1./60, 1./60, 0./60, 1./60,
+                                             1./60, 1./60, 1./60, 2./60, 1./60, 5./60, 1./60, 1./60, 4./60,
+                                             2./60, 4./60, 4./60, 2./60, 1./60, 5./60, 1./60, 2./60, 1./60,
+                                             1./60, 1./60, 1./60, 2./60, 1./60, 2./60])
+        mi_rank_list_expected = np.asarray([0.09182958340544897, 0.07924812503605781, 0.1251629167387823,
+                                            0.031668908831502085, 0.05849625007211564, 0.02516291673878231,
+                                            0.025162916738782307, 0.031668908831502085, 0.1251629167387823,
+                                            0.09182958340544899])
+        mi_rank_id_list_expected = np.asarray([8., 2., 9., 0., 1., 4., 7., 3., 5., 6.])
+
+        # the first 5 rows of vocabulary_occurrences_by_class_pr (the other rows are zero)
+        # [0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0.]
+        # [0. 0. 2. 1. 1. 0. 0. 0. 0. 1. 0. 0. 1. 0. 2. 1. 0. 1. 1. 1. 1. 1. 0. 2. 0. 1. 0. 1. 0. 0. 1. 0. 1.]
+        # [0. 0. 2. 1. 0. 0. 1. 0. 1. 0. 1. 0. 0. 0. 2. 0. 0. 2. 0. 2. 1. 1. 0. 2. 0. 1. 1. 0. 0. 1. 1. 0. 0.]
+        # [0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0.]
+        # [1. 1. 0. 1. 0. 1. 0. 0. 0. 0. 0. 1. 1. 1. 1. 0. 1. 1. 1. 1. 2. 0. 1. 1. 1. 0. 0. 0. 1. 0. 0. 1. 1.]
+        #
+        # occurrences_count
+        # [3, 5, 5, 2, 3, 2, 2, 2, 5, 4]
+        #
+        # occurence_pr before divide
+        # [1. 1. 4. 3. 1. 1. 1. 0. 1. 1. 1. 1. 2. 1. 5. 1. 1. 4. 2. 4. 4. 2. 1. 5. 1. 2. 1. 1. 1. 1. 2. 1. 2.]
+        #
+        # class_pr before divide
+        # [ 0. 20. 20.  0. 20.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0. 0.  0.]
 
         (class_pr, occurrence_pr, word_conditional_class_pr, word_mi_rank) = self.preprocessing.mutual_information_export()
 
@@ -650,10 +668,10 @@ class MultinomialAllLabeledTest(unittest.TestCase):
 
     def test_argument_estimate(self):
         # show info
-        logger.info('acc' + str(metrics.accuracy_score(self.model.data.test_y, self.model.predicted_label)))
-        logger.info('prior pr')
+        logger.info('acc ' + str(metrics.accuracy_score(self.model.data.test_y, self.model.predicted_label)))
+        logger.info('prior_pr')
         logger.info(str(self.model.prior_pr))
-        logger.info('word pr')
+        logger.info('word_pr')
         logger.info(str(self.model.word_pr))
 
         # test prior pr
@@ -719,10 +737,10 @@ class MultinomialEMTest(unittest.TestCase):
     def test_argument_estimate(self):
         # show info
         logger.info('EM loops: ' + str(self.model.EM_loop_count))
-        logger.info('acc' + str(metrics.accuracy_score(self.model.data.test_y, self.model.predicted_label)))
-        logger.info('prior pr')
+        logger.info('acc ' + str(metrics.accuracy_score(self.model.data.test_y, self.model.predicted_label)))
+        logger.info('prior_pr')
         logger.info(str(self.model.prior_pr))
-        logger.info('word pr')
+        logger.info('word_pr')
         logger.info(str(self.model.word_pr))
 
         # test prior pr
@@ -839,10 +857,10 @@ class MultinomialManyToOneTest(unittest.TestCase):
 
         # show info
         logger.info('EM loops: ' + str(model.EM_loop_count))
-        logger.info('acc' + str(metrics.accuracy_score(model.data.test_y, model.predicted_label)))
-        logger.info('prior pr')
+        logger.info('acc ' + str(metrics.accuracy_score(model.data.test_y, model.predicted_label)))
+        logger.info('prior_pr')
         logger.info(str(model.prior_pr))
-        logger.info('word pr')
+        logger.info('word_pr')
         logger.info(str(model.word_pr))
 
         # test prior pr
@@ -912,14 +930,14 @@ class MultinomialManyToOneTest(unittest.TestCase):
 
         # show info
         logger.info('EM loops: ' + str(model.EM_loop_count))
-        logger.info('acc' + str(metrics.accuracy_score(model.data.test_y, model.predicted_label)))
-        logger.info('prior pr')
+        logger.info('acc ' + str(metrics.accuracy_score(model.data.test_y, model.predicted_label)))
+        logger.info('prior_pr')
         logger.info(str(model.prior_pr))
-        logger.info('expected prior pr')
+        logger.info('expected prior_pr')
         logger.info(str(expected_prior_pr))
-        logger.info('word pr')
+        logger.info('word_pr')
         logger.info(str(model.word_pr))
-        logger.info('expected word pr')
+        logger.info('expected word_pr')
         logger.info(str(expected_word_pr))
 
         # test prior pr

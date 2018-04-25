@@ -3,7 +3,7 @@
 #
 # @nghia n h | Yamada lab
 ##
-# This is a mess, my priority is estimating my work first
+# TODO: This code should be replaced !!!
 
 import sys
 import numpy as np

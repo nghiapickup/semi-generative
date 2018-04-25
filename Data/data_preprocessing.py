@@ -304,9 +304,16 @@ class Preprocessing20News(object):
         occurrences_count = []
         # group data by word_id
         vocabularies_count = np.zeros(dict_number, dtype=int)
-        # Be careful! Do not use np.unique here. It raises the problem with words are not counted
+        # Be careful! Do not use np.unique here. It raises the problem with words are not used
         for word in data_load.T[1]:
             vocabularies_count[word - 1] += 1
+
+        # count the number of documents of each class
+        # this info will be used for calc occurrence '0'
+        document_per_class_count = np.zeros(class_number)
+        for label in data_label_load:
+            document_per_class_count[label - 1] += 1
+
         # group word_id index in dataset, because np.unique sorted unique value, so we get id from argsort
         vocabularies_data_mass_index = data_load.T[1].argsort()
         word_index_count = 0
@@ -318,21 +325,26 @@ class Preprocessing20News(object):
 
             # get unique occurrences
             unique_occurrences, inverse_occurrences = np.unique(data_load.T[2][instance_indices],return_inverse=True)
+            # NOTICE: + 1 for occurrence '0'
             # add how many different occurrences of this vocabulary_id, use later for MI calc
-            occurrences_count.append(len(unique_occurrences))
+            occurrences_count.append(len(unique_occurrences) + 1)
 
             # update occurrence count to word_occurrence_by_class
             # occurrences of this vocabulary
-            occurrences_count_of_vocabulary = np.zeros((len(unique_occurrences), class_number))
+            occurrences_count_of_vocabulary = np.zeros((len(unique_occurrences) + 1, class_number))
             for counter, occurrence_id in enumerate(instance_indices):
                 # instance_indices and inverse_occurrences have same index
                 # Notice that word and data id in raw data file counting form 1
                 occurrences_count_of_vocabulary[
                     inverse_occurrences[counter], data_label_load[data_load[occurrence_id, 0] -1] - 1] += 1
+            # add occurrence '0'
+            occurrences_count_of_vocabulary[-1] = (document_per_class_count -
+                                                   occurrences_count_of_vocabulary[:-1].sum(axis=0))
+
             vocabulary_occurrences_by_class_pr.append(occurrences_count_of_vocabulary)
 
         vocabulary_occurrences_by_class_pr = np.vstack(vocabulary_occurrences_by_class_pr).T
-        all_occurrences_number = vocabulary_occurrences_by_class_pr.sum()
+        all_occurrences_number = vocabulary_occurrences_by_class_pr.sum()  # or data_number * dict_number
         occurrence_pr = np.sum(vocabulary_occurrences_by_class_pr, axis=0)
         class_pr = np.sum(vocabulary_occurrences_by_class_pr, axis=1)
 
@@ -346,18 +358,14 @@ class Preprocessing20News(object):
         for vocabulary_id in range(dict_number):
             for occurrence_id in range(occurrence_count_id, occurrence_count_id + occurrences_count[vocabulary_id]):
                 for class_id in range(class_number):
-                    # check if class does not have any instance
-                    # or word does not have any instance
-                    # or word occurs in any class
-                    # or there is no instance of this word in class c
-                    if class_pr[class_id] != 0 \
-                            and occurrence_pr[occurrence_id] != 0 \
-                            and occurrence_pr[occurrence_id] != 1 \
-                            and vocabulary_occurrences_by_class_pr[class_id, occurrence_id] != 0:
-                        word_mi_rank[vocabulary_id] += \
-                            vocabulary_occurrences_by_class_pr[class_id, occurrence_id] * \
-                                        np.log2(vocabulary_occurrences_by_class_pr[class_id, occurrence_id] /
-                                                (class_pr[class_id] * occurrence_pr[occurrence_id]))
+                    # check if class c does not have this occurrence
+                    # or occurrence does not have any instance
+                    # (this only occurs with occurrence '0' when an occurrence appears in any class)
+                    # or class does not have any instance (no document assigns to this class)
+                    pr_class_occurrence = vocabulary_occurrences_by_class_pr[class_id, occurrence_id]
+                    if pr_class_occurrence != 0 and occurrence_pr[occurrence_id] != 0 and class_pr[class_id] != 0:
+                        word_mi_rank[vocabulary_id] += pr_class_occurrence * np.log2(
+                            pr_class_occurrence / (class_pr[class_id] * occurrence_pr[occurrence_id]))
             occurrence_count_id += occurrences_count[vocabulary_id]
 
         # export to file
@@ -425,7 +433,7 @@ class Preprocessing20News(object):
         # only pick data in mi rank list
         # TODO: exception when selected_word_number > vocabulary size
         pick_id = mi_rank_list_load[:selected_word_number]
-        pick_id = np.append(pick_id, -1) # add document class
+        pick_id = np.append(pick_id, -1) # add document label
         # noting here the order of word is now follow the MI rank list
         train_data = train_data.T[pick_id].T
         test_data = test_data.T[pick_id].T

@@ -227,8 +227,7 @@ class MultinomialAllLabeled(object):
         """Training model"""
         for i in range(self.data.train_labeled_number):
             self.prior_pr[int(self.data.train_yl[i])] += 1
-            for k in range(self.data.feature_number):
-                self.word_pr[int(self.data.train_yl[i, 0]),k] += self.data.train_xl[i, k]
+            self.word_pr[int(self.data.train_yl[i])] = self.word_pr[int(self.data.train_yl[i])] + self.data.train_xl[i]
 
         # add-one smoothing in use
         #  class prior probability
