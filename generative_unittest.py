@@ -37,6 +37,7 @@ class Preprocessing20NewsTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        logger.info('START Preprocessing20NewsTest')
         cls.preprocessing = data_pre.Preprocessing20News()
         cls.preprocessing.file_list = cls.demo_file_list
 
@@ -47,6 +48,7 @@ class Preprocessing20NewsTest(unittest.TestCase):
         This test does not check scale length.
         :return:
         """
+        logger.info('START test_news_data_basic_process')
         # TODO test scale length. May brr test_news_data_mi_selection_process
 
         loaded_train_expected = np.asarray([[2., 10., 4., 2., 1., 1., 3., 9., 4.],
@@ -74,6 +76,7 @@ class Preprocessing20NewsTest(unittest.TestCase):
         This test checks the element lists of MI calculating.
         :return:
         """
+        logger.info('START test_mutual_information_export')
         class_pr_expected = np.asarray([0., 20/60, 20/60, 0., 20/60, 0., 0., 0., 0., 0., 0.,
                                         0., 0., 0., 0., 0., 0., 0., 0., 0.])
         occurrence_pr_expected = np.asarray([1./60, 1./60, 4./60, 3./60, 1./60, 1./60, 1./60, 0./60, 1./60,
@@ -170,6 +173,7 @@ class Preprocessing20NewsTest(unittest.TestCase):
 
         :return:
         """
+        logger.info('START test_news_data_mi_selection_process')
         mi_rank_list = np.array([8, 6, 9, 2, 5, 4, 7, 3, 0, 1])
         with open(data_pre.Preprocessing20News.mi_word_rank_file, 'w') as f:
             np.savetxt(f, mi_rank_list[:], fmt="%s")
@@ -238,7 +242,8 @@ class origin_data_splitter_test(unittest.TestCase):
     __doc__ = 'test origin_data_splitter'
 
     @classmethod
-    def setUpClass(clsc):
+    def setUpClass(cls):
+        logger.info('START origin_data_splitter_test')
         origin_data.merge_origin_file_dir = origin_data.file_dir_list(
             vocabulary_file='Data/20news-bydate/test_data/origin/merge_origin/vocabulary.txt',
             map_input='Data/20news-bydate/test_data/origin/merge_origin/data.map',
@@ -273,6 +278,7 @@ class origin_data_splitter_test(unittest.TestCase):
         test total data number
         :return:
         """
+        logger.info('START test_merge_origin_data')
         expected_counter = 10
         counter = origin_data.merge_origin_data()
         self.assertEqual(expected_counter, counter, 'test_merge_origin_data: merged data is not match')
@@ -300,6 +306,7 @@ class origin_data_splitter_test(unittest.TestCase):
         Only load equal_class_test_data_generator function and check the result
         :return:
         """
+        logger.info('START test_equal_class_test_data_generator')
         origin_data.equal_class_test_data_generator(test_instance_per_class=1)
         train_load = np.loadtxt(origin_data.equal_class_test_file_dir.train_input)
         train_label_load = np.loadtxt(origin_data.equal_class_test_file_dir.train_label_input)
@@ -333,7 +340,12 @@ class origin_data_splitter_test(unittest.TestCase):
 #
 class UtilityTest(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        logger.info('START UtilityTest')
+
     def test_log_factorial(self):
+        logger.info('START test_log_factorial')
         expected_1 = 363.73937555556347
         result_1 = nb.Utility.log_factorial(100)
         self.assertEqual(expected_1, result_1, 'test_log_factorial: Fail on test ln(100!)')
@@ -349,6 +361,7 @@ class UtilityTest(unittest.TestCase):
     def test_multinomial_and_posteriori_estimate(self):
         # The method using in NBText is a approximate estimation method.
         # Then this test should check the difference with actual calculation is smaller than acceptable epsilon
+        logger.info('START test_multinomial_and_posteriori_estimate')
         eps = 0.0001
 
         # multinomial test
@@ -388,6 +401,7 @@ class AgglomerativeTreeTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        logger.info('START AgglomerativeTreeTest')
         cls.vector_test1 = nb.hierarchy_tree(sum_vector=np.full((1, 5),1)[0], element_id_list=[1])
         cls.vector_test2 = nb.hierarchy_tree(sum_vector=np.arange(5).reshape(1, 5)[0], element_id_list=[1])
         cls.data_group = [
@@ -420,6 +434,7 @@ class AgglomerativeTreeTest(unittest.TestCase):
         distance = 1 + 1 + 0 + 2 + 5 = 9
 
         """
+        logger.info('START test_distance_function')
         bin_bin = nb.AgglomerativeTree.bin_bin_distance(self.vector_test1, self.vector_test2)
         match = nb.AgglomerativeTree.match_distance(self.vector_test1, self.vector_test2)
         self.assertEqual(1.9 + 1/6, bin_bin, 'bin_to_bin distance mismatch')
@@ -486,6 +501,7 @@ class AgglomerativeTreeTest(unittest.TestCase):
                                  \	   	    /
             Layer 4			         22.5
         """
+        logger.info('START test_build_hierarchy_tree')
         # test bin-bin
         bin_to_bin_expected = nb.hierarchy_tree(sum_vector=np.asarray([36, 36, 42, 44]),
                                                 element_id_list=[0, 1, 2, 3, 4, 5, 8, 9, 6, 7],
@@ -642,6 +658,7 @@ class MultinomialAllLabeledTest(unittest.TestCase):
         The expected value is the loss data smaller than an small epsilon.
         Further more, when the data size is increased, the accuracy should have the same behaviour
         """
+        logger.info('START MultinomialAllLabeledTest')
         cls.test_generator = DataTestGenerator(
             np.vstack(
                 [np.asarray([0.25, 0.25, 0.25, 0.25]),
@@ -668,6 +685,7 @@ class MultinomialAllLabeledTest(unittest.TestCase):
 
     def test_argument_estimate(self):
         # show info
+        logger.info('START test_argument_estimate')
         logger.info('acc ' + str(metrics.accuracy_score(self.model.data.test_y, self.model.predicted_label)))
         logger.info('prior_pr')
         logger.info(str(self.model.prior_pr))
@@ -710,6 +728,7 @@ class MultinomialEMTest(unittest.TestCase):
         The expected value is the loss data smaller than an small epsilon.
         Further more, when the data size is increased, the accuracy should have the same behaviour
         """
+        logger.info('START MultinomialEMTest')
         cls.test_generator = DataTestGenerator(
             np.vstack(
                 [np.asarray([0.25, 0.25, 0.25, 0.25]),
@@ -735,6 +754,7 @@ class MultinomialEMTest(unittest.TestCase):
         cls.model.test()
 
     def test_argument_estimate(self):
+        logger.info('START test_argument_estimate')
         # show info
         logger.info('EM loops: ' + str(self.model.EM_loop_count))
         logger.info('acc ' + str(metrics.accuracy_score(self.model.data.test_y, self.model.predicted_label)))
@@ -798,6 +818,7 @@ class MultinomialManyToOneTest(unittest.TestCase):
         ]
 
         """
+        logger.info('START MultinomialManyToOneTest')
         cls.test_generator_1 = DataTestGenerator(
             np.vstack(
                 [np.asarray([.25, .25, .25, .25]),
@@ -825,6 +846,7 @@ class MultinomialManyToOneTest(unittest.TestCase):
         test sum of all elements is 1
         :return:
         """
+        logger.info('START test_equal_sampling')
         test_size_1 = 10
         result_1 = nb.MultinomialManyToOne.equal_sampling(test_size_1)
         self.assertEqual(1, result_1.sum(), 'test_equal_sampling: Fail in test 1')
@@ -843,6 +865,7 @@ class MultinomialManyToOneTest(unittest.TestCase):
         The expected result should be same as MultinomialEM
         :return:
         """
+        logger.info('START test_argument_estimate_one_one_component')
         self.test_generator_1.csv_export('MMM/')
         list_file = [self.test_generator_1.map_file, self.test_generator_1.train_file, self.test_generator_1.test_file]
         # Extract data
@@ -883,6 +906,7 @@ class MultinomialManyToOneTest(unittest.TestCase):
         The estimated value should not be larger than expected value more than epsilon
         :return:
         """
+        logger.info('test_argument_estimate_many_one_component')
         self.test_generator_1.csv_export('MMM/')
         list_file = [self.test_generator_1.map_file, self.test_generator_1.train_file, self.test_generator_1.test_file]
 
@@ -965,10 +989,12 @@ class NewsEvaluationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        logger.info('START NewsEvaluationTest')
         cls.sub_folder_1a = ['1a_scale/', '1a_no_scale/']
-        cls.sub_folder_1b = ['1b_scale/']
+        cls.sub_folder_1b = ['1b_scale/', '1b_no_scale/']
 
-    def _exp_feature_selection_1a(self):
+    def test_exp_feature_selection_1a(self):
+        logger.info('START test_exp_feature_selection_1a')
         exception_raise = False
         try:
             # use the same data generator
@@ -1000,13 +1026,14 @@ class NewsEvaluationTest(unittest.TestCase):
             evaluation = nb.NewsEvaluation()
             evaluation.default_dir = 'MMM/test_data/'
             evaluation.exp_feature_selection_1a(unlabeled_size=400, n_splits=3)
-        except:
+        except BaseException:
             exception_raise = True
             raise
 
         self.assertFalse(exception_raise, 'test_exp_feature_selection_1a: Exception raised!')
 
     def test_exp_cooperate_unlabeled_1b(self):
+        logger.info('START test_exp_cooperate_unlabeled_1b')
         exception_raise = False
         try:
             # use the same data generator
@@ -1039,7 +1066,7 @@ class NewsEvaluationTest(unittest.TestCase):
             evaluation.default_dir = 'MMM/test_data/'
             evaluation.approximate_labeled_sizes_1b = [10, 20, 30, 50]
             evaluation.exp_cooperate_unlabeled_1b(unlabeled_size=400, n_tries=3)
-        except:
+        except BaseException:
             exception_raise = True
             raise
 

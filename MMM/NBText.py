@@ -2,14 +2,12 @@
 # supervised and semi-supervised
 #
 # @nghia n h | Yamada lab
-##
-# Implemented code here is better than GMM,
-# my priority is estimating my work first
 
 import os
 import sys
 import numpy as np
 import logging
+from decimal import *
 from scipy import special
 from namedlist import namedlist
 from sklearn import metrics
@@ -180,7 +178,8 @@ class Utility(object):
         n = np.sum(word_vector)
         data, pr = np.array(word_vector), np.array(word_pr)
         result = Utility.log_factorial(n) - np.sum(Utility.log_factorial(data)) + np.sum(data * np.log(pr))
-        return np.exp(result)
+        # return np.exp(result)
+        return Decimal(result).exp()
 
     @staticmethod
     def posteriori_estimate(word_vector, word_pr):
@@ -266,6 +265,7 @@ class MultinomialEM(object):
             #  init parameter set
             self.theta_zero = theta_zero
             self.EM_loop_count = -1
+            self.epsilon = 1e-4
 
             # predicted label
             # note: matrix type here, in the same type with data.test_y
@@ -295,42 +295,46 @@ class MultinomialEM(object):
         c = self.data.class_number
         d = self.data.feature_number
 
+        # NOTE DELTA and mle are Decimal type
         # EM algorithm
         loop_count = 0
-        epsilon = 1e-5
 
         # delta_0 estimate
-        delta = np.zeros((l + u, c))
+        delta = [[Decimal(0) for j in range(c)] for i in range(l+u)]
         # labeled data
         for i in range(l):
-            delta[i, int(self.data.train_yl[i])] = 1
+            delta[i][int(self.data.train_yl[i])] = Decimal(1)
         # unlabeled data
-        for j in range(c):
-            for i in range(u):
-                delta[l + i, j] = self.prior_pr[j] * Utility.multinomial(self.data.train_xu[i], self.word_pr[j])
-        delta = (delta.T / delta.sum(axis=1)).T
+        for i in range(u):
+            temp_sum = Decimal(0)  # should be sum by hand, np.sum return 0
+            for j in range(c):
+                delta[l+i][j] = Decimal(self.prior_pr[j]) * Utility.multinomial(self.data.train_xu[i], self.word_pr[j])
+                temp_sum += delta[l+i][j]
+            for j in range(c):
+                delta[l+i][j] /= temp_sum
 
         # MLE_0 calculation
         # Labeled MLE = P(D_L|theta) = sum(i =1 -> l){ log(P(y_i|theta) * P(x_i|y_i, theta)) }
-        log_mle_new = 0
-        log_mle_old = 0
+        log_mle_new = Decimal(0)
+        log_mle_old = Decimal(0)
+
         for i in range(l):
-            log_mle_new += np.log(self.prior_pr[int(self.data.train_yl[i])] *
+            log_mle_new += Decimal(Decimal(self.prior_pr[int(self.data.train_yl[i])]) *
                                   Utility.multinomial(self.data.train_xl[i],
-                                                      self.word_pr[int(self.data.train_yl[i])]))
+                                                      self.word_pr[int(self.data.train_yl[i])])).ln()
         # unlabeled MLE = P(D_U|theta) =
         # sum(i =1 -> u){ sum(j=1 -> c){ delta[i, j] * log(P(y_i|theta) * P(x_i|y_i, theta)) }}
-        for j in range(c):
-            for i in range(u):
-                log_mle_new += delta[i, j] * np.log(
-                    self.prior_pr[j] * Utility.multinomial(self.data.train_xu[i], self.word_pr[j]))
+        for i in range(u):
+            for j in range(c):
+                log_mle_new += delta[i+l][j] * (Decimal(self.prior_pr[j]) *
+                                                Utility.multinomial(self.data.train_xu[i], self.word_pr[j])).ln()
 
         # data D = (xl, yl) union (xu)
         # the loop continues from theta_1
         # The process starts with M-step first, then E-step for estimating delta with same theta version
         # the same version of (theta, delta) take easier for tracking convergence estimate
         # (which is computed by the same (theta, delta))
-        while abs(log_mle_new - log_mle_old) > epsilon:
+        while abs(log_mle_new - log_mle_old) > self.epsilon:
             logger.info('Diff: ' + str(log_mle_new - log_mle_old))
             loop_count += 1
             # M step
@@ -341,13 +345,13 @@ class MultinomialEM(object):
             # add-one smoothing in use
             for j in range(c):
                 for i in range(l):
-                    self.prior_pr[j] += delta[i, j]
-                    self.word_pr[j] =self.word_pr[j] + delta[i, j] * self.data.train_xl[i]
+                    self.prior_pr[j] += float(delta[i][j])
+                    self.word_pr[j] = self.word_pr[j] + float(delta[i][j]) * self.data.train_xl[i]
                 for i in range(u):
-                    self.prior_pr[j] += delta[i + l, j]
-                    self.word_pr[j] = self.word_pr[j] + delta[i + l, j] * self.data.train_xu[i]
+                    self.prior_pr[j] += float(delta[i+l][j])
+                    self.word_pr[j] = self.word_pr[j] + float(delta[i+l][j]) * self.data.train_xu[i]
                 #  class prior probability
-                self.prior_pr[j] = (self.prior_pr[j] + 1) / float(l + u + c)
+                self.prior_pr[j] = (self.prior_pr[j]+ 1) / float(l+u+c)
 
             #  word conditional probability
             sum_word_pr = self.word_pr.sum(axis=1)
@@ -356,26 +360,29 @@ class MultinomialEM(object):
 
             # E step
             # delta estimate
-            delta = np.zeros((l + u, c))
+            delta = [[Decimal(0) for j in range(c)] for i in range(l+u)]
             for i in range(l):
-                delta[i, int(self.data.train_yl[i])] = 1
-            for j in range(c):
-                for i in range(u):
-                    delta[i + l, j] = self.prior_pr[j] * Utility.multinomial(self.data.train_xu[i], self.word_pr[j])
-            delta = (delta.T / delta.sum(axis=1)).T
+                delta[i][int(self.data.train_yl[i])] = Decimal(1)
+            for i in range(u):
+                temp_sum = Decimal(0)
+                for j in range(c):
+                    delta[i+l][j] = Decimal(self.prior_pr[j]) * Utility.multinomial(self.data.train_xu[i], self.word_pr[j])
+                    temp_sum += delta[i+l][j]
+                for j in range(c):
+                    delta[l+i][j] /= temp_sum
 
             # check convergence condition
             log_mle_old = log_mle_new
             # MLE calculation
-            log_mle_new = 0
+            log_mle_new = Decimal(0)
             for i in range(l):
-                log_mle_new += np.log(self.prior_pr[int(self.data.train_yl[i])] *
+                log_mle_new += (Decimal(self.prior_pr[int(self.data.train_yl[i])]) *
                                       Utility.multinomial(self.data.train_xl[i],
-                                                          self.word_pr[int(self.data.train_yl[i])]))
-            for j in range(c):
-                for i in range(u):
-                    log_mle_new += delta[i, j] * np.log(
-                        self.prior_pr[j] * Utility.multinomial(self.data.train_xu[i], self.word_pr[j]))
+                                                          self.word_pr[int(self.data.train_yl[i])])).ln()
+            for i in range(u):
+                for j in range(c):
+                    log_mle_new += delta[i+l][j] * (Decimal(self.prior_pr[j]) *
+                                                  Utility.multinomial(self.data.train_xu[i], self.word_pr[j])).ln()
 
         self.EM_loop_count = loop_count
 
@@ -417,7 +424,7 @@ class MultinomialManyToOne(object):
                 raise SelfException.ComponentCountIsList(
                     'Component count must be a list')
             self.component_count_list = component_count_list
-            self.component_number = np.sum(component_count_list)
+            self.component_number = component_count_list.sum()
             self.component_count_cumulative = np.zeros(self.data.class_number + 1).astype(int)
             self.component_assignment_list = component_assignment_list
 
@@ -427,6 +434,7 @@ class MultinomialManyToOne(object):
             #  word conditional probability per component [ [P(wi|m1)] ... [P(wi|m...)] ], i=1..d
             self.word_pr = np.zeros((self.component_number, self.data.feature_number))
             self.EM_loop_count = -1
+            self.epsilon = 1e-4
 
             # predicted label
             # note: matrix type here, in the same type with data.test_y
@@ -464,32 +472,32 @@ class MultinomialManyToOne(object):
         m = self.component_number
 
         self.component_count_cumulative[0] = 0
-        for i in range(1, c + 1):
-            self.component_count_cumulative[i] = self.component_count_cumulative[i-1] + self.component_count_list[i -1]
+        for i in range(1, c+1):
+            self.component_count_cumulative[i] = self.component_count_cumulative[i-1] + self.component_count_list[i-1]
 
         # init delta
-        delta = np.zeros((l + u, m))
+        delta = [[Decimal(0) for j in range(m)] for i in range(l+u)]
         for i in range(l):
             label = int(self.data.train_yl[i])
             if self.component_assignment_list is None:
                 # random sampling
                 sampling = self.equal_sampling(self.component_count_list[label])
-                for j in range(self.component_count_cumulative[label], self.component_count_cumulative[label + 1]):
-                    delta[i,j] = sampling[j - self.component_count_cumulative[label]]
+                for j in range(self.component_count_cumulative[label], self.component_count_cumulative[label+1]):
+                    delta[i][j] = Decimal(sampling[j-self.component_count_cumulative[label]])
             else:
                 # sample from prior assigned component
                 for class_id, class_component in enumerate(self.component_assignment_list):
                     for component_id, component_list in enumerate(class_component):
                         for data in component_list:
                             component_location = self.component_count_cumulative[class_id] + component_id
-                            delta[data, component_location] = 1
+                            delta[data][component_location] = Decimal(1)
 
         # theta_0 estimate
         for i in range(l):
             label = int(self.data.train_yl[i])
             for j in range(self.component_count_cumulative[label], self.component_count_cumulative[label + 1]):
-                self.prior_pr[j] += delta[i, j]
-                self.word_pr[j] = self.word_pr[j] + delta[i, j] * self.data.train_xl[i]
+                self.prior_pr[j] += float(delta[i][j])
+                self.word_pr[j] = self.word_pr[j] + float(delta[i][j]) * self.data.train_xl[i]
         # add-one smoothing in use
         #  class prior probability
         self.prior_pr[:] += 1
@@ -501,34 +509,42 @@ class MultinomialManyToOne(object):
 
         # EM algorithm
         loop_count = 0
-        epsilon = 1e-5
 
         # delta_0 estimate
-        delta = np.zeros((l + u, m))
-        for j in range(m):
-            for i in range(l):
-                delta[i, j] = self.prior_pr[j] * Utility.multinomial(self.data.train_xl[i], self.word_pr[j])
-            for i in range(u):
-                delta[l + i, j] = self.prior_pr[j] * Utility.multinomial(self.data.train_xu[i], self.word_pr[j])
-        delta = (delta.T / delta.sum(axis=1)).T
+        delta = [[Decimal(0) for j in range(m)] for i in range(l+u)]
+        for i in range(l):
+            temp_sum = Decimal(0)
+            for j in range(m):
+                delta[i][j] = Decimal(self.prior_pr[j]) * Utility.multinomial(self.data.train_xl[i], self.word_pr[j])
+                temp_sum += delta[i][j]
+            for j in range(m):
+                delta[i][j] = delta[i][j] / temp_sum
+
+        for i in range(u):
+            temp_sum = Decimal(0)
+            for j in range(m):
+                delta[l+i][j] = Decimal(self.prior_pr[j]) * Utility.multinomial(self.data.train_xu[i], self.word_pr[j])
+                temp_sum += delta[l+i][j]
+            for j in range(m):
+                delta[l+i][j] = delta[l+i][j] / temp_sum
 
         # MLE_0 calculation
-        log_mle_new = 0
-        log_mle_old = 0
+        log_mle_new = Decimal(0)
+        log_mle_old = Decimal(0)
         for j in range(m):
             for i in range(l):
-                log_mle_new += delta[i, j] * np.log(
-                    self.prior_pr[j] * Utility.multinomial(self.data.train_xl[i], self.word_pr[j]))
+                log_mle_new += delta[i][j] * Decimal(Decimal(self.prior_pr[j]) *
+                                                     Utility.multinomial(self.data.train_xl[i], self.word_pr[j])).ln()
             for i in range(u):
-                log_mle_new += delta[i, j] * np.log(
-                    self.prior_pr[j] * Utility.multinomial(self.data.train_xu[i], self.word_pr[j]))
+                log_mle_new += delta[l+i][j] * Decimal(Decimal(self.prior_pr[j]) *
+                                                       Utility.multinomial(self.data.train_xu[i], self.word_pr[j])).ln()
 
         # data D = (xl, yl) union (xu)
         # the loop continues from theta_1
         # The process is started with M-step first, then E-step for estimating delta with same theta version
         # the same version of (theta, delta) take easier for tracking convergence estimate
         # (which is computed by the same (theta, delta))
-        while abs(log_mle_new - log_mle_old) > epsilon:
+        while abs(log_mle_new - log_mle_old) > self.epsilon:
             logger.info('Diff: ' + str(log_mle_new - log_mle_old))
             loop_count += 1
             # M step
@@ -538,24 +554,24 @@ class MultinomialManyToOne(object):
             for i in range(l):
                 label = int(self.data.train_yl[i])
                 for j in range(self.component_count_cumulative[label]):
-                    delta[i, j] = 0
-                for j in range(self.component_count_cumulative[label + 1], m):
-                    delta[i, j] = 0
+                    delta[i][j] = Decimal(0)
+                for j in range(self.component_count_cumulative[label+1], m):
+                    delta[i][j] = Decimal(0)
                 # re-normalize delta of component for each label sum to 1
-                temp_sum = np.sum(delta[i])
-                for j in range(self.component_count_cumulative[label], self.component_count_cumulative[label + 1]):
-                    delta[i, j] /= float(temp_sum)
+                temp_sum = sum(delta[i])
+                for j in range(self.component_count_cumulative[label], self.component_count_cumulative[label+1]):
+                    delta[i][j] /= temp_sum
 
             # add-one smoothing in use
             for j in range(m):
                 for i in range(l):
-                    self.prior_pr[j] += delta[i, j]
-                    self.word_pr[j] = self.word_pr[j] + delta[i, j] * self.data.train_xl[i]
+                    self.prior_pr[j] += float(delta[i][j])
+                    self.word_pr[j] = self.word_pr[j] + float(delta[i][j]) * self.data.train_xl[i]
                 for i in range(u):
-                    self.prior_pr[j] += delta[i + l, j]
-                    self.word_pr[j] = self.word_pr[j] + delta[i + l, j] * self.data.train_xu[i]
+                    self.prior_pr[j] += float(delta[i+l][j])
+                    self.word_pr[j] = self.word_pr[j] + float(delta[i+l][j]) * self.data.train_xu[i]
                 #  class prior probability
-                self.prior_pr[j] = (self.prior_pr[j] + 1) / float(l + u + m)
+                self.prior_pr[j] = (self.prior_pr[j] + 1) / float(l+u+m)
 
             #  word conditional probability
             sum_word_pr = self.word_pr.sum(axis=1)
@@ -564,25 +580,36 @@ class MultinomialManyToOne(object):
 
             # E step
             # delta estimate
-            delta = np.zeros((l + u, m))
-            for j in range(m):
-                for i in range(l):
-                    delta[i, j] = self.prior_pr[j] * Utility.multinomial(self.data.train_xl[i], self.word_pr[j])
-                for i in range(u):
-                    delta[i + l, j] = self.prior_pr[j] * Utility.multinomial(self.data.train_xu[i], self.word_pr[j])
-            delta = (delta.T / delta.sum(axis=1)).T
+            delta = [[ Decimal(0) for j in range(m)] for i in range(l+u)]
+            for i in range(l):
+                temp_sum = Decimal(0)
+                for j in range(m):
+                    delta[i][j] = Decimal(self.prior_pr[j]) * \
+                                  Utility.multinomial(self.data.train_xl[i], self.word_pr[j])
+                    temp_sum += delta[i][j]
+                for j in range(m):
+                    delta[i][j] /= temp_sum
+
+            for i in range(u):
+                temp_sum = Decimal(0)
+                for j in range(m):
+                    delta[l+i][j] = Decimal(self.prior_pr[j]) * \
+                                    Utility.multinomial(self.data.train_xu[i], self.word_pr[j])
+                    temp_sum += delta[l+i][j]
+                for j in range(m):
+                    delta[l+i][j] /= temp_sum
 
             # check convergence condition
             log_mle_old = log_mle_new
             # MLE calculation
-            log_mle_new = 0
+            log_mle_new = Decimal(0)
             for j in range(m):
                 for i in range(l):
-                    log_mle_new += delta[i, j] * np.log(
-                        self.prior_pr[j] * Utility.multinomial(self.data.train_xl[i], self.word_pr[j]))
+                    log_mle_new += delta[i][j] * Decimal(Decimal(self.prior_pr[j]) *
+                                                         Utility.multinomial(self.data.train_xl[i], self.word_pr[j])).ln()
                 for i in range(u):
-                    log_mle_new += delta[i, j] * np.log(
-                        self.prior_pr[j] * Utility.multinomial(self.data.train_xu[i], self.word_pr[j]))
+                    log_mle_new += delta[l+i][j] * Decimal(Decimal(self.prior_pr[j]) *
+                                                           Utility.multinomial(self.data.train_xu[i], self.word_pr[j])).ln()
 
         self.EM_loop_count = loop_count
 
@@ -781,9 +808,9 @@ class NewsEvaluation(object):
         self.sub_folder_list_1a = '1a_scale 1a_no_scale'.split()
 
         # exp_cooperation_unlabeled_1b
-        self.sub_folder_list_1b = '1b_scale'.split()
+        self.sub_folder_list_1b = '1b_scale 1b_no_scale'.split()
 
-        self.approximate_labeled_sizes_1b = np.array([100, 200, 500, 700, 1000, 1500])
+        self.approximate_labeled_sizes_1b = np.array([100, 200, 500, 700, 1000, 1500, 2000, 2500])
 
     # Note for the returned agglomerative tree
     # 1. there are 2 arguments for many_to_one :
@@ -853,7 +880,7 @@ class NewsEvaluation(object):
 
     # I. The advantage of unlabeled data
     # a) test feature selection
-    def exp_feature_selection_1a(self, unlabeled_size=6000, n_splits=5, random_seed=0):
+    def exp_feature_selection_1a(self, unlabeled_size=5000, n_splits=5, random_seed=0):
         """
         exp the feature selection. There are 2 things we need to experiment:
         1. Scaling data
@@ -963,7 +990,7 @@ class NewsEvaluation(object):
             logger.exception('exp_feature_selection_1a BaseException')
             raise
 
-    def exp_cooperate_unlabeled_1b(self, unlabeled_size=6000, n_tries=5, random_seed=0):
+    def exp_cooperate_unlabeled_1b(self, unlabeled_size=5000, n_tries=5, random_seed=0):
         """
         Exps are taking here:
         1. Test with fix large amount of unlabeled data, vary types of labeled size
@@ -1019,6 +1046,7 @@ class NewsEvaluation(object):
                         loop_count = 0
                         for _, testcase_train_index in skf.split(origin_ssl_data.train_xl, origin_ssl_data.train_yl):
                             loop_count += 1
+                            # if the n_splits < n_tries (the number of folds is not enough) then the loop run is smaller
                             if loop_count > n_tries: break
 
                             # TODO Check the copied elements
@@ -1092,8 +1120,8 @@ def main():
         #     list_file = input("command: ").split()
         evaluation = NewsEvaluation()
 
-        evaluation.exp_feature_selection_1a()
-        # evaluation.exp_cooperate_unlabeled_1b
+        # evaluation.exp_feature_selection_1a()
+        evaluation.exp_cooperate_unlabeled_1b()
 
         print('Done!')
         logger.info('Done!')
