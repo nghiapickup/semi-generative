@@ -448,9 +448,8 @@ class Preprocessing20News(object):
         # a = (a.T * scale / a.sum(axis=1)).T
         # We omit the label a.T[:-1].T before calculating
         if scale_length > 0:
-            # it may occur that there is zero vector after remove features.
-            train_data.T[:-1] = np.nan_to_num(train_data.T[:-1] * scale_length / train_data.T[:-1].sum(axis=0))
-            test_data.T[:-1] = np.nan_to_num(test_data.T[:-1] * scale_length / test_data.T[:-1].sum(axis=0))
+            train_data.T[:-1] = train_data.T[:-1] * scale_length / train_data.T[:-1].sum(axis=0)
+            test_data.T[:-1] = test_data.T[:-1] * scale_length / test_data.T[:-1].sum(axis=0)
 
         # extract to files
         if extract_to_file:
@@ -472,14 +471,14 @@ def main():
         # [EXP]
         # 1.a. scale and no scale, with vary features number
         cmd_1a_scale = ['1a_scale',
-                        'news_data_mi_selection_process 100 500 extract_to_file=True',
-                        'news_data_mi_selection_process 200 500 extract_to_file=True',
-                        'news_data_mi_selection_process 400 500 extract_to_file=True',
-                        'news_data_mi_selection_process 600 500 extract_to_file=True',
-                        'news_data_mi_selection_process 1000 500 extract_to_file=True',
-                        'news_data_mi_selection_process 5000 500 extract_to_file=True',
-                        'news_data_mi_selection_process 7000 500 extract_to_file=True',
-                        'news_data_mi_selection_process 10000 500 extract_to_file=True']
+                        'news_data_mi_selection_process 100 10000 extract_to_file=True',
+                        'news_data_mi_selection_process 200 10000 extract_to_file=True',
+                        'news_data_mi_selection_process 400 10000 extract_to_file=True',
+                        'news_data_mi_selection_process 600 10000 extract_to_file=True',
+                        'news_data_mi_selection_process 1000 10000 extract_to_file=True',
+                        'news_data_mi_selection_process 5000 10000 extract_to_file=True',
+                        'news_data_mi_selection_process 7000 10000 extract_to_file=True',
+                        'news_data_mi_selection_process 10000 10000 extract_to_file=True']
         cmd_1a_no_scale = ['1a_no_scale',
                            'news_data_mi_selection_process 100 -1 extract_to_file=True',
                            'news_data_mi_selection_process 200 -1 extract_to_file=True',
@@ -491,10 +490,10 @@ def main():
                            'news_data_mi_selection_process 10000 -1 extract_to_file=True']
 
         # 1.b. 400 features, scale length 5s
-        cmd_1b_400_scale = ['1b_scale',
-                            'news_data_mi_selection_process 400 500 extract_to_file=True']
-        cmd_1b_400_no_scale = ['1b_no_scale',
-                            'news_data_mi_selection_process 400 -1 extract_to_file=True']
+        cmd_1b_600_scale = ['1b_scale',
+                            'news_data_mi_selection_process 600 10000 extract_to_file=True']
+        cmd_1b_600_no_scale = ['1b_no_scale',
+                            'news_data_mi_selection_process 600 -1 extract_to_file=True']
 
         # list of cmd, with the first element is sub-folder name. This will be the sub dir of default dir.
         # FIXME alter here

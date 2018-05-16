@@ -181,18 +181,6 @@ class Utility(object):
         # return np.exp(result)
         return Decimal(result).exp()
 
-    @staticmethod
-    def posteriori_estimate(word_vector, word_pr):
-        """
-        return estimated posteriori of x with NB model
-        :param word_vector: word vector
-        :param word_pr: class conditional probability for word vector
-        :return: estimated posteriori (constant omitted)
-        """
-        data, pr = np.array(word_vector), np.array(word_pr)
-        result = np.sum(data * np.log(pr))
-        return np.exp(result)
-
 
 class MultinomialAllLabeled(object):
     __doc__ = 'Deploy all labeled data Multinomial model for text classification; ' \
@@ -232,6 +220,7 @@ class MultinomialAllLabeled(object):
         #  class prior probability
         self.prior_pr[:] += 1
         self.prior_pr = np.divide(self.prior_pr, float(self.data.train_labeled_number + self.data.class_number))
+
         #  word conditional probability
         sum_word_pr = self.word_pr.sum(axis=1)
         self.word_pr[:] += 1
@@ -239,12 +228,17 @@ class MultinomialAllLabeled(object):
 
     def test(self):
         """Estimated value of x for each class"""
-        estimate_value = np.zeros((self.data.test_number, self.data.class_number))
+        estimate_value = [[Decimal(0) for j in range(self.data.class_number)] for i in range(self.data.test_number)]
         for i in range(self.data.test_number):
+            max_val = 0
+            max_id = -1
             for j in range(self.data.class_number):
-                estimate_value[i, j] = self.prior_pr[j] * \
-                                       Utility.posteriori_estimate(self.data.test_x[i,:], self.word_pr[j,:])
-            self.predicted_label[i, 0] = np.argmax(estimate_value[i])
+                estimate_value[i][j] = Decimal(self.prior_pr[j]) * \
+                                       Utility.multinomial(self.data.test_x[i,:], self.word_pr[j,:])
+                if max_val < estimate_value[i][j]:
+                    max_val = estimate_value[i][j]
+                    max_id = j
+            self.predicted_label[i, 0] = max_id
 
 
 class MultinomialEM(object):
@@ -252,7 +246,13 @@ class MultinomialEM(object):
               'EM algorithm; ' \
               'This only work with SslDataset data (using train_xl).'
 
-    def __init__(self, dataset, theta_zero=None):
+    def __init__(self, dataset, theta_zero=None, epsilon=1e-4):
+        """
+        Init model
+        :param dataset: dataset
+        :param theta_zero: defalut None, set theta zero
+        :param epsilon: default 1e-4, MLE convergence threshold
+        """
         try:
             if type(dataset) is not SslDataset: raise SelfException.DataTypeConstraint('Dataset type is not SslDataset')
             self.data = dataset
@@ -265,7 +265,7 @@ class MultinomialEM(object):
             #  init parameter set
             self.theta_zero = theta_zero
             self.EM_loop_count = -1
-            self.epsilon = 1e-4
+            self.epsilon = epsilon
 
             # predicted label
             # note: matrix type here, in the same type with data.test_y
@@ -388,12 +388,17 @@ class MultinomialEM(object):
 
     def test(self):
         """Estimated value of x for each class"""
-        estimate_value = np.zeros((self.data.test_number, self.data.class_number))
+        estimate_value = [[Decimal(0) for j in range(self.data.class_number)] for i in range(self.data.test_number)]
         for i in range(self.data.test_number):
+            max_val = 0
+            max_id = -1
             for j in range(self.data.class_number):
-                estimate_value[i, j] = self.prior_pr[j] * \
-                                       Utility.posteriori_estimate(self.data.test_x[i], self.word_pr[j])
-            self.predicted_label[i, 0] = np.argmax(estimate_value[i])
+                estimate_value[i][j] = Decimal(self.prior_pr[j]) * \
+                                       Utility.multinomial(self.data.test_x[i, :], self.word_pr[j, :])
+                if max_val < estimate_value[i][j]:
+                    max_val = estimate_value[i][j]
+                    max_id = j
+            self.predicted_label[i, 0] = max_id
 
 
 class MultinomialManyToOne(object):
@@ -401,7 +406,7 @@ class MultinomialManyToOne(object):
               'many to one assumption, EM algorithm; ' \
               'This only work with SslDataset data (using train_xl).'
 
-    def __init__(self, dataset, component_count_list, component_assignment_list=None):
+    def __init__(self, dataset, component_count_list, component_assignment_list=None, epsilon=1e-4):
         """
         init the data for model.
         Component_assignment contains the data init for each component.
@@ -411,6 +416,7 @@ class MultinomialManyToOne(object):
         :param component_count_list: list or 1-d array, list number of components for each class
         :param component_assignment_list: 3-d ndarray or list of list of list,
                                           component assignment list for each labeled data
+        :param epsilon: default 1e-4, MLE convergence threshold
         """
         try:
             if type(dataset) is not SslDataset:
@@ -434,7 +440,7 @@ class MultinomialManyToOne(object):
             #  word conditional probability per component [ [P(wi|m1)] ... [P(wi|m...)] ], i=1..d
             self.word_pr = np.zeros((self.component_number, self.data.feature_number))
             self.EM_loop_count = -1
-            self.epsilon = 1e-4
+            self.epsilon = epsilon
 
             # predicted label
             # note: matrix type here, in the same type with data.test_y
@@ -615,13 +621,18 @@ class MultinomialManyToOne(object):
 
     def test(self):
         """Estimated value of x for each class"""
-        estimate_value = np.zeros((self.data.test_number, self.data.class_number))
+        estimate_value = [[Decimal(0) for j in range(self.data.class_number)] for i in range(self.data.test_number)]
         for i in range(self.data.test_number):
+            max_val = 0
+            max_id = -1
             for j in range(self.data.class_number):
                 for k in range(self.component_count_cumulative[j], self.component_count_cumulative[j+1]):
-                    estimate_value[i, j] += self.prior_pr[k] * \
-                                            Utility.posteriori_estimate(self.data.test_x[i], self.word_pr[k])
-            self.predicted_label[i, 0] = np.argmax(estimate_value[i])
+                    estimate_value[i][j] += self.prior_pr[k] * \
+                                            Utility.multinomial(self.data.test_x[i], self.word_pr[k])
+                if max_val < estimate_value[i][j]:
+                    max_val = estimate_value[i][j]
+                    max_id = j
+            self.predicted_label[i, 0] = max_id
 
 
 """ Hierarchy tree data type.
@@ -809,8 +820,7 @@ class NewsEvaluation(object):
 
         # exp_cooperation_unlabeled_1b
         self.sub_folder_list_1b = '1b_scale 1b_no_scale'.split()
-
-        self.approximate_labeled_sizes_1b = np.array([100, 200, 500, 700, 1000, 1500, 2000, 2500])
+        self.approximate_labeled_sizes_1b = np.array([100, 200, 500, 700, 1000, 1500, 2000, 2500, 3000, 4000, 5000])
 
     # Note for the returned agglomerative tree
     # 1. there are 2 arguments for many_to_one :
@@ -880,7 +890,7 @@ class NewsEvaluation(object):
 
     # I. The advantage of unlabeled data
     # a) test feature selection
-    def exp_feature_selection_1a(self, unlabeled_size=5000, n_splits=5, random_seed=0):
+    def exp_feature_selection_1a(self, unlabeled_size=5000, n_splits=5, random_seed=0, epsilon=1e-4):
         """
         exp the feature selection. There are 2 things we need to experiment:
         1. Scaling data
@@ -902,6 +912,7 @@ class NewsEvaluation(object):
         :param unlabeled_size: size of unlabeled training data
         :param n_splits: number of split fold for train labeled data
         :param random_seed: default = 0, random seed
+        :param epsilon: default 1e-4, MLE convergence threshold for EM based algorithm
         :return:
         """
         logger.info('Start Evaluation - exp_feature_selection_1a')
@@ -953,7 +964,7 @@ class NewsEvaluation(object):
 
                         # Test EM
                         logger.info('START: EM')
-                        em_model = MultinomialEM(testcase_data)
+                        em_model = MultinomialEM(testcase_data, epsilon=epsilon)
                         em_model.train()
                         em_model.test()
                         temp_result = self.report_export(em_model, test_dir + em_result_filename,
@@ -990,7 +1001,7 @@ class NewsEvaluation(object):
             logger.exception('exp_feature_selection_1a BaseException')
             raise
 
-    def exp_cooperate_unlabeled_1b(self, unlabeled_size=5000, n_tries=5, random_seed=0):
+    def exp_cooperate_unlabeled_1b(self, unlabeled_size=5000, n_tries=5, random_seed=0, epsilon=1e-4):
         """
         Exps are taking here:
         1. Test with fix large amount of unlabeled data, vary types of labeled size
@@ -1009,6 +1020,7 @@ class NewsEvaluation(object):
         :param unlabeled_size: int, default=6000, size of unlabeled data
         :param n_tries: int, default=5, number of re-train times
         :param random_seed: int, default=0, seed of random generator
+        :param epsilon: default 1e-4, MLE convergence threshold for EM based algorithm
         :return:
         """
         logger.info('Start Evaluation - exp_cooperation_unlabeled_1b')
@@ -1045,9 +1057,8 @@ class NewsEvaluation(object):
 
                         loop_count = 0
                         for _, testcase_train_index in skf.split(origin_ssl_data.train_xl, origin_ssl_data.train_yl):
-                            loop_count += 1
-                            # if the n_splits < n_tries (the number of folds is not enough) then the loop run is smaller
-                            if loop_count > n_tries: break
+                            # if n_splits < n_tries (the number of folds is not enough) then the loop run is smaller
+                            if loop_count >= n_tries: break
 
                             # TODO Check the copied elements
                             testcase_data = SslDataset(origin_ssl_data)
@@ -1074,7 +1085,7 @@ class NewsEvaluation(object):
 
                             # Test EM
                             logger.info('START: EM')
-                            em_model = MultinomialEM(testcase_data)
+                            em_model = MultinomialEM(testcase_data, epsilon=epsilon)
                             em_model.train()
                             em_model.test()
                             temp_result = self.report_export(em_model, test_dir + em_sub_result_filename,
@@ -1089,21 +1100,25 @@ class NewsEvaluation(object):
                                 avg_EM_result.support += temp_result.support
                             logger.info('DONE: EM')
                             logger.info('Loop count: ' + str(em_model.EM_loop_count))
+
+                            loop_count += 1
+
                         # compute average values
                         avg_NB_result.accuracy, avg_NB_result.precision, \
                         avg_NB_result.recall, avg_NB_result.f1, avg_NB_result.support = \
-                            np.divide(avg_NB_result.accuracy, n_tries), \
-                            np.divide(avg_NB_result.precision, n_tries), \
-                            np.divide(avg_NB_result.recall, n_tries), \
-                            np.divide(avg_NB_result.f1, n_tries), \
-                            np.divide(avg_NB_result.support, n_tries)
+                            np.divide(avg_NB_result.accuracy, loop_count), \
+                            np.divide(avg_NB_result.precision, loop_count), \
+                            np.divide(avg_NB_result.recall, loop_count), \
+                            np.divide(avg_NB_result.f1, loop_count), \
+                            np.divide(avg_NB_result.support, loop_count)
+
                         avg_EM_result.accuracy, avg_EM_result.precision, \
                         avg_EM_result.recall, avg_EM_result.f1, avg_EM_result.support = \
-                            np.divide(avg_EM_result.accuracy, n_tries), \
-                            np.divide(avg_EM_result.precision, n_tries), \
-                            np.divide(avg_EM_result.recall, n_tries), \
-                            np.divide(avg_EM_result.f1, n_tries), \
-                            np.divide(avg_EM_result.support, n_tries)
+                            np.divide(avg_EM_result.accuracy, loop_count), \
+                            np.divide(avg_EM_result.precision, loop_count), \
+                            np.divide(avg_EM_result.recall, loop_count), \
+                            np.divide(avg_EM_result.f1, loop_count), \
+                            np.divide(avg_EM_result.support, loop_count)
                         self.report_avg_report(test_dir + nb_sub_result_filename, 'AVERAGE NB', avg_NB_result)
                         self.report_avg_report(test_dir + em_sub_result_filename, 'AVERAGE EM', avg_EM_result)
 
@@ -1120,8 +1135,8 @@ def main():
         #     list_file = input("command: ").split()
         evaluation = NewsEvaluation()
 
-        # evaluation.exp_feature_selection_1a()
-        evaluation.exp_cooperate_unlabeled_1b()
+        # evaluation.exp_feature_selection_1a(epsilon=1e-3)
+        evaluation.exp_cooperate_unlabeled_1b(epsilon=1e-3)
 
         print('Done!')
         logger.info('Done!')

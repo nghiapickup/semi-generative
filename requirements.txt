@@ -1,11 +1,12 @@
 cycler==0.10.0
 kiwisolver==1.0.1
 namedlist==1.7
-numpy==1.14.2
+numpy==1.14.3
 pyparsing==2.2.0
-python-dateutil==2.7.2
+python-dateutil==2.7.3
 pytz==2018.4
 scikit-learn==0.19.1
-scipy==1.0.1
+scipy==1.1.0
 six==1.11.0
 spicy==0.16.0
+virtualenv==15.2.0
