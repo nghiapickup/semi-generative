@@ -409,7 +409,7 @@ class MultinomialManyToOne(object):
     def __init__(self, dataset, component_count_list, component_assignment_list=None, epsilon=1e-4):
         """
         init the data for model.
-        Component_assignment contains the data init for each component.
+        component_assignment_list contains the data init for each component.
         In case of None component_assignment,
         the random partial probability for all components in a class will be derived.
         :param dataset: data
@@ -627,7 +627,7 @@ class MultinomialManyToOne(object):
             max_id = -1
             for j in range(self.data.class_number):
                 for k in range(self.component_count_cumulative[j], self.component_count_cumulative[j+1]):
-                    estimate_value[i][j] += self.prior_pr[k] * \
+                    estimate_value[i][j] += Decimal(self.prior_pr[k]) * \
                                             Utility.multinomial(self.data.test_x[i], self.word_pr[k])
                 if max_val < estimate_value[i][j]:
                     max_val = estimate_value[i][j]
@@ -820,7 +820,11 @@ class NewsEvaluation(object):
 
         # exp_cooperation_unlabeled_1b
         self.sub_folder_list_1b = '1b_scale 1b_no_scale'.split()
-        self.approximate_labeled_sizes_1b = np.array([100, 200, 500, 700, 1000, 1500, 2000, 2500, 3000, 4000, 5000])
+        self.approximate_labeled_sizes_1b = np.array([100, 200, 500, 700, 1000, 1500, 2000, 2500, 3000, 4000])
+
+        # exp_feature_selection_2a
+        self.sub_folder_list_2a = '2a'.split()
+        self.approximate_labeled_sizes_2a = np.array([1000])
 
     # Note for the returned agglomerative tree
     # 1. there are 2 arguments for many_to_one :
@@ -892,7 +896,7 @@ class NewsEvaluation(object):
     # a) test feature selection
     def exp_feature_selection_1a(self, unlabeled_size=5000, n_splits=5, random_seed=0, epsilon=1e-4):
         """
-        exp the feature selection. There are 2 things we need to experiment:
+        exp the feature selection. Experiment proceduce:
         1. Scaling data
         2. Feature selection using Mutual Information (MI) word rank
 
@@ -922,7 +926,8 @@ class NewsEvaluation(object):
         nb_result_filename = 'NB_1a_result.log'
         em_result_filename = 'EM_1a_result.log'
         try:
-            # this default exp uses 6000 data as unlabeled data, the remaining is split into 5 non-overlap parts with size 1000
+            # this default exp uses unlabeled_size data as unlabeled data,
+            # the remaining is split into n_splits non-overlap parts with size 1000
             for sub_folder in sub_folder_list:
                 # get all tests in sub-folder
                 test_folder_list = next(os.walk(self.default_dir + sub_folder + '/'))[1]
@@ -1003,7 +1008,7 @@ class NewsEvaluation(object):
 
     def exp_cooperate_unlabeled_1b(self, unlabeled_size=5000, n_tries=5, random_seed=0, epsilon=1e-4):
         """
-        Exps are taking here:
+        Experiment proceduce:
         1. Test with fix large amount of unlabeled data, vary types of labeled size
         The size of labeled size is defined by number of fold split of train data (after split unlabeled data)
 
@@ -1017,7 +1022,7 @@ class NewsEvaluation(object):
         The func will scan default_dir location and process through all sub-folder in sub_folder_list (one-by-one).
         In each sub-folder contains all test cases for one exp.
         The process will perform the algorithm and return the result file in the same folder of each test case.
-        :param unlabeled_size: int, default=6000, size of unlabeled data
+        :param unlabeled_size: int, default=5000, size of unlabeled data
         :param n_tries: int, default=5, number of re-train times
         :param random_seed: int, default=0, seed of random generator
         :param epsilon: default 1e-4, MLE convergence threshold for EM based algorithm
@@ -1028,12 +1033,10 @@ class NewsEvaluation(object):
         sub_folder_list = self.sub_folder_list_1b
         nb_result_filename = 'NB_1b_result.log'
         em_result_filename = 'EM_1b_result.log'
-        # 1500 is fix for 5 sub-testcase (7500 data) as default
-        # these number are only the approximate expected instances, the exact ones based on the Kfold splitter
 
         try:
-            # this default exp uses 6000 data as unlabeled data,
-            # the remaining is split into vary non-overlap parts with size 1000
+            # this default exp uses unlabeled_size data as unlabeled data,
+            # the remaining is split into vary non-overlap parts with vary sizes
             for sub_folder in sub_folder_list:
                 # get all tests in sub-folder
                 test_folder_list = next(os.walk(self.default_dir + sub_folder + '/'))[1]
@@ -1126,6 +1129,151 @@ class NewsEvaluation(object):
             logger.exception('exp_cooperate_unlabeled_1b BaseException')
             raise
 
+    # II. Data grouping assumption
+    def exp_group_assumption_2a(self, unlabeled_size=5000, n_tries=5,
+                                   n_parameter_estimate_tries=5, random_seed=0, epsilon=1e-4):
+        """
+        Experiment proceduce:
+        1. Test with fix large amount of unlabeled data, with small amount of labeled data
+        At each try, parameter will seleected from cross-validation using n_parameter_estimate_tries folds
+
+        Exp Model
+        NB and EM with 3 different assumption:
+        - (1) Origin
+        - (2) Group with random assignment
+        - (3) Group with hierarchy assignment
+
+        Expected:
+        - The advantage of EN also be upgraded with assumptions.
+
+        Data Reading:
+        The func will scan default_dir location and process through all sub-folder in sub_folder_list (one-by-one).
+        In each sub-folder contains all test cases for one exp.
+        The process will perform the algorithm and return the result file in the same folder of each test case.
+        :param unlabeled_size: int, default=5000, size of unlabeled data
+        :param n_tries: int, default=5, number of re-train times
+        :param n_parameter_estimate_tries: positive int, default=5,
+                                            number of fold use for parameter estimate(group speading) at each try
+        :param random_seed: int, default=0, seed of random generator
+        :param epsilon: default 1e-4, MLE convergence threshold for EM based algorithm
+        :return:
+        """
+        logger.info('Start Evaluation - exp_group_assumption_2a')
+        logger.info('unlabeled_size: ' + str(unlabeled_size))
+        sub_folder_list = self.sub_folder_list_2a
+        nb1_result_filename = 'NB1_2a_result.log'
+        em1_result_filename = 'EM1_2a_result.log'
+        # FIXME Add more algorithm here
+
+        try:
+            for sub_folder in sub_folder_list:
+                # get all tests in sub-folder
+                test_folder_list = next(os.walk(self.default_dir + sub_folder + '/'))[1]
+                for test_folder in test_folder_list:
+                    test_dir = self.default_dir + sub_folder + '/' + test_folder + '/'
+                    logger.info('START TEST: ' + test_dir)
+                    origin_data = Dataset()
+                    origin_data.load_from_csv([test_dir + self.map_filename,
+                                               test_dir + self.train_filename, test_dir + self.test_filename])
+                    origin_ssl_data = SslDataset(origin_data, unlabeled_size=unlabeled_size, random_seed=random_seed)
+
+                    for sub_train_number in self.approximate_labeled_sizes_2a:
+                        n_splits = round(len(origin_ssl_data.train_xl) / float(sub_train_number))
+                        skf = model_selection.StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+
+                        # split train data into 5 overlap parts and get the average
+                        avg_NB1_result = None
+                        avg_EM1_result = None
+                        # FIXME Add more algorithm here
+                        nb1_sub_result_filename = str(sub_train_number) + nb1_result_filename
+                        em1_sub_result_filename = str(sub_train_number) + em1_result_filename
+                        # FIXME Add more algorithm here
+
+                        loop_count = 0
+                        for _, testcase_train_index in skf.split(origin_ssl_data.train_xl, origin_ssl_data.train_yl):
+                            # if n_splits < n_tries (the number of folds is not enough) then the loop run is smaller
+                            if loop_count >= n_tries: break
+
+                            # TODO Check the copied elements
+                            testcase_data = SslDataset(origin_ssl_data)
+                            testcase_data.train_xl = origin_ssl_data.train_xl[testcase_train_index]
+                            testcase_data.train_yl = origin_ssl_data.train_yl[testcase_train_index]
+                            testcase_data.train_labeled_number = len(testcase_train_index)
+
+                            # Test NB 1
+                            logger.info('START: Naive Bayes 1 (origin)')
+                            nb1_model = MultinomialAllLabeled(testcase_data)
+                            nb1_model.train()
+                            nb1_model.test()
+                            temp_result = self.report_export(nb1_model, test_dir + nb1_sub_result_filename,
+                                                             extend_file=True, detail_return=True)
+                            if avg_NB1_result is None:
+                                avg_NB1_result = temp_result
+                            else:
+                                avg_NB1_result.accuracy += temp_result.accuracy
+                                avg_NB1_result.precision += temp_result.precision
+                                avg_NB1_result.recall += temp_result.recall
+                                avg_NB1_result.f1 += temp_result.f1
+                                avg_NB1_result.support += temp_result.support
+                            logger.info('DONE: Naive Bayes 1 (origin)')
+
+                            # Test EM 1
+                            logger.info('START: EM 1 (origin)')
+                            em1_model = MultinomialEM(testcase_data, epsilon=epsilon)
+                            em1_model.train()
+                            em1_model.test()
+                            temp_result = self.report_export(em1_model, test_dir + em1_sub_result_filename,
+                                                             extend_file=True, detail_return=True)
+                            if avg_EM1_result is None:
+                                avg_EM1_result = temp_result
+                            else:
+                                avg_EM1_result.accuracy += temp_result.accuracy
+                                avg_EM1_result.precision += temp_result.precision
+                                avg_EM1_result.recall += temp_result.recall
+                                avg_EM1_result.f1 += temp_result.f1
+                                avg_EM1_result.support += temp_result.support
+                            logger.info('DONE: EM 1 (origin)')
+                            logger.info('Loop count: ' + str(em1_model.EM_loop_count))
+
+                            # FIXME Add more algorithm here
+                            # Test NB 2
+
+                            # Test NB 2
+
+                            # Test EM 2
+
+                            # Test NB 3
+
+                            # Test EM 3
+
+                            loop_count += 1
+
+                        # compute average values
+                        avg_NB1_result.accuracy, avg_NB1_result.precision, \
+                        avg_NB1_result.recall, avg_NB1_result.f1, avg_NB1_result.support = \
+                            np.divide(avg_NB1_result.accuracy, loop_count), \
+                            np.divide(avg_NB1_result.precision, loop_count), \
+                            np.divide(avg_NB1_result.recall, loop_count), \
+                            np.divide(avg_NB1_result.f1, loop_count), \
+                            np.divide(avg_NB1_result.support, loop_count)
+
+                        avg_EM1_result.accuracy, avg_EM1_result.precision, \
+                        avg_EM1_result.recall, avg_EM1_result.f1, avg_EM1_result.support = \
+                            np.divide(avg_EM1_result.accuracy, loop_count), \
+                            np.divide(avg_EM1_result.precision, loop_count), \
+                            np.divide(avg_EM1_result.recall, loop_count), \
+                            np.divide(avg_EM1_result.f1, loop_count), \
+                            np.divide(avg_EM1_result.support, loop_count)
+                        # FIXME Add more algorithm here
+
+                        self.report_avg_report(test_dir + nb1_sub_result_filename, 'AVERAGE NB1', avg_NB1_result)
+                        self.report_avg_report(test_dir + em1_sub_result_filename, 'AVERAGE EM1', avg_EM1_result)
+                        # FIXME Add more algorithm here
+
+        except BaseException:
+            logger.exception('exp_group_assumption_2a BaseException')
+            raise
+
 
 def main():
     try:
@@ -1135,10 +1283,14 @@ def main():
         #     list_file = input("command: ").split()
         evaluation = NewsEvaluation()
 
+        # Test I
         # evaluation.exp_feature_selection_1a(epsilon=1e-3)
-        evaluation.exp_cooperate_unlabeled_1b(epsilon=1e-3)
+        # evaluation.exp_cooperate_unlabeled_1b(epsilon=1e-3)
 
-        print('Done!')
+        # Test II
+        # evaluation.exp_group_assumption_2a(unlabeled_size=7000, epsilon=1e-3)
+        evaluation.exp_group_assumption_2a(unlabeled_size=7000, epsilon=1e-1)
+
         logger.info('Done!')
     except BaseException:
         logger.exception('main() BaseException')

@@ -490,14 +490,17 @@ def main():
                            'news_data_mi_selection_process 10000 -1 extract_to_file=True']
 
         # 1.b. 400 features, scale length 5s
-        cmd_1b_600_scale = ['1b_scale',
-                            'news_data_mi_selection_process 600 10000 extract_to_file=True']
-        cmd_1b_600_no_scale = ['1b_no_scale',
-                            'news_data_mi_selection_process 600 -1 extract_to_file=True']
+        cmd_1b_400_scale = ['1b_scale',
+                            'news_data_mi_selection_process 400 10000 extract_to_file=True']
+        cmd_1b_400_no_scale = ['1b_no_scale',
+                            'news_data_mi_selection_process 400 -1 extract_to_file=True']
+
+        cmd_2a_scale_origin = ['2a',
+                           'news_data_mi_selection_process 400 10000 extract_to_file=True']
 
         # list of cmd, with the first element is sub-folder name. This will be the sub dir of default dir.
         # FIXME alter here
-        cmd_list = cmd_export_mi_list
+        cmd_list = cmd_2a_scale_origin
         # only accept cmd called function from this list
         list_accepted_function = 'news_data_basic_process mutual_information_export ' \
                                  'news_data_mi_selection_process'.split()

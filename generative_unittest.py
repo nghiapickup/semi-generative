@@ -7,6 +7,8 @@ import sys
 import os
 import copy
 import unittest
+from decimal import *
+import logging
 import numpy as np
 import scipy.stats
 from sklearn import metrics
@@ -14,7 +16,6 @@ import exceptionHandle as SelfException
 import MMM.NBText as nb
 import Data.data_preprocessing as data_pre
 import Data.origin_data_splitter as origin_data
-import logging
 
 logger = logging.getLogger('generative_unittest')
 SelfException.LogHandler('generative_unittest')
@@ -358,7 +359,7 @@ class UtilityTest(unittest.TestCase):
         result_3 = nb.Utility.log_factorial(23)
         self.assertEqual(expected_3, result_3, 'test_log_factorial: Fail on test ln(23!)')
 
-    def test_multinomial_and_posteriori_estimate(self):
+    def test_multinomial_estimate(self):
         # The method using in NBText is a approximate estimation method.
         # Then this test should check the difference with actual calculation is smaller than acceptable epsilon
         logger.info('START test_multinomial_and_posteriori_estimate')
@@ -369,32 +370,19 @@ class UtilityTest(unittest.TestCase):
         x_1 = np.random.multinomial(4, word_prior_1)
         expected_1 = scipy.stats.multinomial(n=4, p=word_prior_1).pmf(x_1)
         result_1 = nb.Utility.multinomial(x_1, word_prior_1)
-        self.assertTrue(abs(expected_1 - result_1) < eps, 'test_multinomial: Fail on test 1')
+        self.assertTrue(abs(Decimal(expected_1) - result_1) < eps, 'test_multinomial: Fail on test 1')
 
         word_prior_2 = np.asanyarray([0.5, 0.1, 0.1, 0.3])
         x_2 = np.random.multinomial(4, word_prior_2)
         expected_2 = scipy.stats.multinomial(n=4, p=word_prior_2).pmf(x_2)
         result_2 = nb.Utility.multinomial(x_2, word_prior_2)
-        self.assertTrue(abs(expected_2 - result_2) < eps, 'test_multinomial: Fail on test 2')
+        self.assertTrue(abs(Decimal(expected_2) - result_2) < eps, 'test_multinomial: Fail on test 2')
 
         word_prior_3 = np.asanyarray([0.2, 0.2, 0.2, 0.4])
         x_3 = np.random.multinomial(4, word_prior_3)
         expected_3 = scipy.stats.multinomial(n=4, p=word_prior_3).pmf(x_3)
         result_3 = nb.Utility.multinomial(x_3, word_prior_3)
-        self.assertTrue(abs(expected_3 - result_3) < eps, 'test_multinomial: Fail on test 3')
-
-        # posteriori_estimate test
-        expected_1 = np.prod(np.power(word_prior_1, x_1))
-        result_1 = nb.Utility.posteriori_estimate(x_1, word_prior_1)
-        self.assertTrue(abs(expected_1 - result_1) < eps, 'test_posteriori_estimate: Fail on test 1')
-
-        expected_2 = np.prod(np.power(word_prior_2, x_2))
-        result_2 = nb.Utility.posteriori_estimate(x_2, word_prior_2)
-        self.assertTrue(abs(expected_2 - result_2) < eps, 'test_posteriori_estimate: Fail on test 2')
-
-        expected_3 = np.prod(np.power(word_prior_3, x_3))
-        result_3 = nb.Utility.posteriori_estimate(x_3, word_prior_3)
-        self.assertTrue(abs(expected_3 - result_3) < eps, 'test_posteriori_estimate: Fail on test 3')
+        self.assertTrue(abs(Decimal(expected_3) - result_3) < eps, 'test_multinomial: Fail on test 3')
 
 
 class AgglomerativeTreeTest(unittest.TestCase):
@@ -992,8 +980,9 @@ class NewsEvaluationTest(unittest.TestCase):
         logger.info('START NewsEvaluationTest')
         cls.sub_folder_1a = ['1a_scale/', '1a_no_scale/']
         cls.sub_folder_1b = ['1b_scale/', '1b_no_scale/']
+        cls.sub_folder_2a = ['2a/']
 
-    def test_exp_feature_selection_1a(self):
+    def _exp_feature_selection_1a(self):
         logger.info('START test_exp_feature_selection_1a')
         exception_raise = False
         try:
@@ -1032,7 +1021,7 @@ class NewsEvaluationTest(unittest.TestCase):
 
         self.assertFalse(exception_raise, 'test_exp_feature_selection_1a: Exception raised!')
 
-    def test_exp_cooperate_unlabeled_1b(self):
+    def _exp_cooperate_unlabeled_1b(self):
         logger.info('START test_exp_cooperate_unlabeled_1b')
         exception_raise = False
         try:
@@ -1071,6 +1060,46 @@ class NewsEvaluationTest(unittest.TestCase):
             raise
 
         self.assertFalse(exception_raise, 'test_exp_cooperate_unlabeled_1b: Exception raised!')
+
+    def test_exp_group_assumption_2a(self):
+        logger.info('START test_exp_group_assumption_2a')
+        exception_raise = False
+        try:
+            # use the same data generator
+            test_generator = DataTestGenerator(
+                np.vstack(
+                    [np.asarray([0.25, 0.25, 0.25, 0.25]),
+                     np.asarray([0.3, 0.4, 0.2, 0.1]),
+                     np.asarray([0.2, 0.2, 0.2, 0.4]),
+                     np.asarray([0.1, 0.3, 0.3, 0.3])]),
+                np.asarray([0.2, 0.5, 0.15, 0.15]),
+                train_size=1000,
+                total_word_count=100,
+                test_size_per_class=10)
+            # data generator
+            for sub_folder in self.sub_folder_2a:
+                for test_count in range(2):
+                    # only 2 cases per sub-folder
+                    # dir: MMM/test_generator.default_export_path/sub_folder/test_count/self.default_export_filename_list
+
+                    test_dir = sub_folder + str(test_count) + '/'
+                    os.makedirs(os.path.dirname('MMM/' + test_generator.default_export_path + test_dir), exist_ok=True)
+                    # update filename_list with sub_folder/test_count folder
+                    filename_list =[test_dir + self.default_export_filename_list[0],
+                                    test_dir + self.default_export_filename_list[1],
+                                    test_dir + self.default_export_filename_list[2]]
+                    test_generator.csv_export('MMM/', export_name_list=filename_list)
+
+            # test model
+            evaluation = nb.NewsEvaluation()
+            evaluation.default_dir = 'MMM/test_data/'
+            evaluation.approximate_labeled_sizes_2a = [10, 20, 30, 50]
+            evaluation.exp_group_assumption_2a(unlabeled_size=400, n_tries=3, n_parameter_estimate_tries=2)
+        except BaseException:
+            exception_raise = True
+            raise
+
+        self.assertFalse(exception_raise, 'test_exp_group_assumption_2a: Exception raised!')
 #
 # main
 #
@@ -1092,7 +1121,7 @@ def main():
 
     evaluation_test = [NewsEvaluationTest]
 
-    temp_test = []
+    temp_test = [NewsEvaluationTest]
 
     # list of all desired tests
     # require_test = 'mmm_test data_preprocessing_test evaluation_test'
@@ -1105,9 +1134,9 @@ def main():
     test_list = []
     if 'temp_test' in require_test:
         test_list.extend(temp_test)
-    if 'mmm' in require_test:
+    if 'mmm_test' in require_test:
         test_list.extend(mmm_test)
-    if 'data_preprocessing' in require_test:
+    if 'data_preprocessing_test' in require_test:
         test_list.extend(data_preprocessing_test)
     if 'evaluation_test' in require_test:
         test_list.extend(evaluation_test)
