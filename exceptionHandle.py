@@ -41,6 +41,18 @@ class MismatchInputArgumentList(BaseExceptionHandle):
     def __init__(self, message):
         super(MismatchInputArgumentList, self).__init__()
 
+class RequiredFileIsMissing(BaseExceptionHandle):
+    """This Error will be raised when the code  cannot find the required file """
+
+    def __init__(self, message):
+        super(RequiredFileIsMissing, self).__init__()
+
+class UnSupportMethod(BaseExceptionHandle):
+    """This Error will be raised when program calls methods or parameters that are currently unsupported """
+
+    def __init__(self, message):
+        super(UnSupportMethod, self).__init__()
+
 
 # DATA INPUT EXCEPTION
 

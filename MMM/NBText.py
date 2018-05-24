@@ -5,13 +5,15 @@
 
 import os
 import sys
-import numpy as np
 import logging
 from decimal import *
+
+import numpy as np
 from scipy import special
 from namedlist import namedlist
 from sklearn import metrics
 from sklearn import model_selection
+
 import exceptionHandle as SelfException
 
 logger = logging.getLogger('NBText')
@@ -182,8 +184,8 @@ class Utility(object):
         return Decimal(result).exp()
 
 
-class MultinomialAllLabeled(object):
-    __doc__ = 'Deploy all labeled data Multinomial model for text classification; ' \
+class MultinomialNB(object):
+    __doc__ = 'Deploy all labeled data Naive Bayes Multinomial model for text classification; ' \
               'MLE derivative solution; ' \
               'This only work with SslDataset data (using train_xl).'
 
@@ -285,7 +287,7 @@ class MultinomialEM(object):
             self.prior_pr = self.theta_zero[0]
             self.word_pr = self.theta_zero[1]
         else:
-            model = MultinomialAllLabeled(self.data)
+            model = MultinomialNB(self.data)
             model.train()
             self.prior_pr = model.prior_pr
             self.word_pr = model.word_pr
@@ -401,7 +403,7 @@ class MultinomialEM(object):
             self.predicted_label[i, 0] = max_id
 
 
-class MultinomialManyToOne(object):
+class MultinomialManyToOneEM(object):
     __doc__ = 'Deploy Semi-supervised Multinomial model for text classification; ' \
               'many to one assumption, EM algorithm; ' \
               'This only work with SslDataset data (using train_xl).'
@@ -415,7 +417,8 @@ class MultinomialManyToOne(object):
         :param dataset: data
         :param component_count_list: list or 1-d array, list number of components for each class
         :param component_assignment_list: 3-d ndarray or list of list of list,
-                                          component assignment list for each labeled data
+                                          component assignment list for each labeled data.
+                                          If this list is None, random sampling will be used.
         :param epsilon: default 1e-4, MLE convergence threshold
         """
         try:
@@ -426,9 +429,9 @@ class MultinomialManyToOne(object):
             if len(component_count_list) != self.data.class_number:
                 raise SelfException.MismatchLengthComponentList(
                     'Component list has different length with number of classes')
-            if type(component_count_list) is not list and not np.ndarray:
+            if type(component_count_list) is not np.ndarray:
                 raise SelfException.ComponentCountIsList(
-                    'Component count must be a list')
+                    'Component count must be a np.ndarray')
             self.component_count_list = component_count_list
             self.component_number = component_count_list.sum()
             self.component_count_cumulative = np.zeros(self.data.class_number + 1).astype(int)
@@ -650,7 +653,7 @@ a splitter including index in element_id_list and order number
 :param id: index of splitter in element_id_list
 :param order: oder of splitter counted from 0
 """
-splitter = namedlist('splitter', 'id, order', default=0)
+splitter = namedlist('splitter', 'cut_id, cut_value, order', default=0)
 
 class AgglomerativeTree(object):
     __doc__ = 'Agglomerative Hierarchy Tree'
@@ -729,7 +732,7 @@ class AgglomerativeTree(object):
     def build_hierarchy_tree(self, data_list):
         """
         build agglomerative tree
-        * The algorithm is simple the merge of hierarchy_tree  and the split of each layer is split_list.
+        * The algorithm is simple the merge of hierarchy_tree and the split of each layer is split_list.
         * Each time two hierarchy_tree are merged, the two split_list are merged too.
         * Also the index list splitter.index of the right side merged hierarchy_tree will be updated
         * by number of elements of the right one. The splitter.order does not need to update.
@@ -758,11 +761,13 @@ class AgglomerativeTree(object):
                 # update splitter index of min_index[1] when cluster min_index[0] is merge on its left side
                 extend_length = len(data_list[min_index[0]].element_id_list)
                 for split in data_list[min_index[1]].splitter_list:
-                    split.id += extend_length
+                    split.cut_id += extend_length
                 data_list[min_index[0]].element_id_list.extend(data_list[min_index[1]].element_id_list)
                 data_list[min_index[0]].splitter_list.extend(data_list[min_index[1]].splitter_list)
                 # set new splitter between 2 new merged clusters
-                data_list[min_index[0]].splitter_list.append(splitter(id=extend_length-1, order=splitter_count))
+                data_list[min_index[0]].splitter_list.append(splitter(cut_id=extend_length-1,
+                                                                      cut_value=cluster_metric[min_index],
+                                                                      order=splitter_count))
 
                 # TODO: Finding a fast way to update metric matrix
                 # update metric matrix for new min_index[0]
@@ -786,7 +791,7 @@ class AgglomerativeTree(object):
             logger.exception('build_hierarchy_tree')
             raise
 
-    def build_hierarchy_scheme(self):
+    def build_hierarchy_scheme_multi_class(self):
         x = self.data.train_xl
         y = self.data.train_yl
         hierarchy_scheme = []
@@ -801,6 +806,31 @@ class AgglomerativeTree(object):
         # build tree for each group data by class
         for tree in data_group_by_label:
             hierarchy_scheme.append(self.build_hierarchy_tree(tree))
+        return hierarchy_scheme
+
+    def build_hierarchy_scheme_binary_class(self):
+        # NOTICE that this only for specific case of binary class when we only assert tree on the label '1'
+        # Only build tree on negative class label '1'
+        # the returned hierarchy_scheme contains
+        X = self.data.train_xl
+        y = self.data.train_yl
+
+        # assign empty hierarchy_tree (contain all data label '0') for label '0'
+        lable0_tree = hierarchy_tree(sum_vector=[], element_id_list=[], splitter_list=[])
+        data_group_label1 = []
+
+        # group data by label
+        # For label 0: only collect all data point has lable '0'
+        # For label 1: first init each data point as a tree
+        for counter, val in enumerate(y):
+            if val == 1:
+                data_group_label1.append(
+                    hierarchy_tree(sum_vector=X[counter], element_id_list=[counter], splitter_list=[]))
+            else:
+                lable0_tree.element_id_list.append(counter)
+
+        # build tree for each group data by class
+        hierarchy_scheme = [lable0_tree, self.build_hierarchy_tree(data_group_label1)]
         return hierarchy_scheme
 
 
@@ -821,19 +851,6 @@ class NewsEvaluation(object):
         # exp_cooperation_unlabeled_1b
         self.sub_folder_list_1b = '1b_scale 1b_no_scale'.split()
         self.approximate_labeled_sizes_1b = np.array([100, 200, 500, 700, 1000, 1500, 2000, 2500, 3000, 4000])
-
-        # exp_feature_selection_2a
-        self.sub_folder_list_2a = '2a'.split()
-        self.approximate_labeled_sizes_2a = np.array([1000])
-
-    # Note for the returned agglomerative tree
-    # 1. there are 2 arguments for many_to_one :
-    # First is the list count of component per each class
-    # Second is the list assignment labeled data for each component
-    #   So this list is a list of n sub-list with n equals to number of class
-    #   each sub-list n_i is m_i sub-sub-list, with m_i is the number of components of class i
-    #   each |m_i| sub-sub-sub-list is including labeled data ids of each component in class i
-    # NOTE: The order of class must follow class id. That means class 0 will be before class 1, ...
 
     def report_export(self, model, file_name, extend_file=False, detail_return=False):
         """
@@ -891,6 +908,7 @@ class NewsEvaluation(object):
             f.writelines('\n f1 ' + str(result.f1))
             f.writelines('\n support ' + str(result.support))
             f.writelines('\n')
+
 
     # I. The advantage of unlabeled data
     # a) test feature selection
@@ -952,7 +970,7 @@ class NewsEvaluation(object):
 
                         # Test Naive Bayes
                         logger.info('START: Naive Bayes')
-                        nb_model = MultinomialAllLabeled(testcase_data)
+                        nb_model = MultinomialNB(testcase_data)
                         nb_model.train()
                         nb_model.test()
                         temp_result = self.report_export(nb_model, test_dir + nb_result_filename,
@@ -1071,7 +1089,7 @@ class NewsEvaluation(object):
 
                             # Test Naive Bayes
                             logger.info('START: Naive Bayes')
-                            nb_model = MultinomialAllLabeled(testcase_data)
+                            nb_model = MultinomialNB(testcase_data)
                             nb_model.train()
                             nb_model.test()
                             temp_result = self.report_export(nb_model, test_dir + nb_sub_result_filename,
@@ -1129,22 +1147,275 @@ class NewsEvaluation(object):
             logger.exception('exp_cooperate_unlabeled_1b BaseException')
             raise
 
+class Reuters21578Evaluation(object):
+    __doc__ = 'Evaluation methods using Reuters21578 dataset' \
+              'Data 11367' \
+              'vocabulary size 28438'
+    result_return_form = namedlist('result_return_form', 'accuracy, precision, recall, f1, support')
+
+    def __init__(self):
+        self.default_dir = 'data/'
+        self.map_filename, self.train_filename, self.test_filename = 'news.map.csv', 'news.train.csv', 'news.test.csv'
+
+        # exp_feature_selection_2a
+        self.sub_folder_list_2a = '2a_reuters_test_scale_3'.split()
+        self.approximate_labeled_sizes_2a = np.array([500, 1000])
+
+    # Note for the returned agglomerative tree
+    # 1. there are 2 arguments for many_to_one :
+    # First is the list count of component per each class
+    # Second is the list assignment labeled data for each component
+    #   So this list is a list of n sub-list with n equals to number of class
+    #   each sub-list n_i is m_i sub-sub-list, with m_i is the number of components of class i
+    #   each |m_i| sub-sub-sub-list is including labeled data ids of each component in class i
+    # NOTE: The order of class must follow class id. That means class 0 will be before class 1, ...
+
+    def report_export(self, model, file_name, extend_file=False, detail_return=False):
+        """
+        Export report
+        :param model:
+        :param file_name: file name
+        :param extend_file: bool, set true if extend train and test files while export result
+        :return:
+        """
+        label = model.data.class_name_list
+        target = model.data.test_y
+        prediction = model.predicted_label
+
+        # calculate evaluation index
+        accuracy = metrics.accuracy_score(target, prediction)
+        report = metrics.classification_report(target, prediction, target_names=label)
+
+        # export report
+        if extend_file:
+            with open(file_name, 'a') as f:
+                f.write(report)
+                f.writelines('\n#labeled: ' + str(model.data.train_labeled_number))
+                f.writelines('\n#unlabeled: ' + str(model.data.train_unlabeled_number))
+                f.writelines('\nAccuracy: ' + str(accuracy))
+                f.writelines('\n')
+        else:
+            with open(file_name, 'w') as f:
+                f.write(report)
+                f.writelines('\n#labeled: ' + str(model.data.train_labeled_number))
+                f.writelines('\n#unlabeled: ' + str(model.data.train_unlabeled_number))
+                f.writelines('\nAccuracy: ' + str(accuracy))
+                f.writelines('\n')
+
+        # return value in detail
+        if detail_return:
+            detail = metrics.precision_recall_fscore_support(target, prediction)
+            return self.result_return_form(accuracy=accuracy,
+                                           precision=detail[0].round(4), recall=detail[1].round(4),
+                                           f1=detail[2].round(4), support=detail[3])
+
+    def report_avg_report(self, file_name, title, result):
+        """
+        export avg(summary) result (accuracy, precision, recall, f1)
+        The export file will be extend to write from the end
+        :param file_name: string, file to export
+        :param title: string, title to print
+        :param result: result_return_form, result to export
+        :return:
+        """
+        with open(file_name, 'a') as f:
+            f.writelines('\n' + title)
+            f.writelines('\n Accuracy ' + str(result.accuracy))
+            f.writelines('\n Precision ' + str(result.precision))
+            f.writelines('\n Recall ' + str(result.recall))
+            f.writelines('\n f1 ' + str(result.f1))
+            f.writelines('\n support ' + str(result.support))
+            f.writelines('\n')
+
+    def estimated_random_many_one_component(self, dataset, selected_model='EM',
+                                            n_folds=5, max_try = 5, component_threshold=50):
+        """
+        Estimated number of component per class using random sampling
+        Currently this search only uses for Reuters binary classification with default class lable '0'.
+        Then it only searhc component for the second label '1'.
+        :param dataset:
+        :param selected_model: 'NB' for Naive Bayes or 'EM' for EM algorithm
+        :param n_folds: number of folds split
+        :param max_try: default =1, maximum try for each cross-validation (Not recommend, this forces the calc times)
+        :param component_threshold: max component search number
+        :return:
+        """
+        logger.info('START estimated_random_many_one_component')
+        if dataset.class_number > 2:
+            raise SelfException.UnSupportMethod('Only supports binary classification')
+        selected_parameter = np.asarray([1, 1])
+        try:
+            try_count = 0
+            skf = model_selection.StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=113)
+            max_f1 = -1
+            best_component = 1
+            for i in range(1, component_threshold):
+                selected_parameter[1] = i
+                avg_f1 = 0
+                for train_index, test_index in skf.split(dataset.train_xl, dataset.train_yl):
+                    try_count += 1
+                    if try_count > max_try: break
+                    # generate testcase
+                    testcase_data = SslDataset(dataset)
+                    testcase_data.train_xl = dataset.train_xl[train_index]
+                    testcase_data.train_yl = dataset.train_yl[train_index]
+                    testcase_data.train_labeled_number = len(train_index)
+                    testcase_data.test_x = dataset.train_xl[test_index]
+                    testcase_data.test_y = dataset.train_yl[test_index]
+                    testcase_data.test_number = len(test_index)
+                    if selected_model == 'EM':
+                        model = MultinomialManyToOneEM(testcase_data,
+                                                       component_count_list=selected_parameter, epsilon=1e-1)
+                    elif selected_model == 'NB':
+                        # FIXME Change Many-to-one NB here
+                        model = MultinomialNB(testcase_data)
+                    else:
+                        raise SelfException.UnSupportMethod('Only NB or EM option is accepted')
+                    model.train()
+                    model.test()
+                    avg_f1 += metrics.f1_score(model.data.test_y, model.predicted_label)
+                if  avg_f1 > max_f1:
+                    max_f1 = avg_f1
+                    best_component = i
+            selected_parameter[1] = best_component
+            logger.info('Best component: ' + str(best_component))
+        except BaseException:
+            logger.exception('estimated_random_many_one_component BaseException')
+            raise
+        return selected_parameter
+
+    def estimated_tree_many_one_component(self, dataset, selected_model='EM', n_folds=5, max_try = 5,
+                                          component_threshold=50, distance_metric='match_distance'):
+        """
+        Estimated number of component per class using aglomarative hierarchy tree sampling
+        Currently this search only uses for Reuters binary classification with default class label '0'.
+        Then it only search component for the second label '1'.
+
+        The CV procedure in search to find the best cut_value with highest f1_score on all folds
+        :param dataset:
+        :param selected_model: 'NB' for Naive Bayes or 'EM' for EM algorithm
+        :param n_folds: number of folds split
+        :param max_try: default =1, maximum try for each cross-validation (Not recommend, this forces the calc times)
+        :param component_threshold: max component search number
+        :param distance_metric: type of distance method using for building tree
+        :return:
+        """
+        logger.info('START estimated_tree_many_one_component')
+        if dataset.class_number > 2:
+            raise SelfException.UnSupportMethod('Only supports binary classification')
+        try:
+            try_count = 0
+            avg_split_value = 0
+            skf = model_selection.StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=113)
+            for train_index, test_index in skf.split(dataset.train_xl, dataset.train_yl):
+                try_count += 1
+                if try_count > max_try: break
+                # generate testcase
+                testcase_data = SslDataset(dataset)
+                testcase_data.train_xl = dataset.train_xl[train_index]
+                testcase_data.train_yl = dataset.train_yl[train_index]
+                testcase_data.train_labeled_number = len(train_index)
+                testcase_data.test_x = dataset.train_xl[test_index]
+                testcase_data.test_y = dataset.train_yl[test_index]
+                testcase_data.test_number = len(test_index)
+
+                # build hierarchy tree
+                # NOTICE that this only for specific case of binary class when we only assert tree on label '1'
+                tree = AgglomerativeTree(testcase_data, metric=distance_metric)
+                hierarchy_scheme = tree.build_hierarchy_scheme_binary_class()
+                # get list id data for each class
+                component_assignment_label0 = hierarchy_scheme[0].element_id_list
+                component_assignment_label1 = hierarchy_scheme[1].element_id_list
+                # get the splitters to reconstruct the tree
+                # the reconstruction starts from splitter has the last order (highest order value)
+                splitter_scheme_label1 = sorted(hierarchy_scheme[1].splitter_list, key=lambda x: x.order, reverse=True)
+
+                # start to reconstruct tree
+                extract_count = 0
+                split_id_list = []
+                max_f1_score = 0
+                best_split_value = 0
+                for split in splitter_scheme_label1:
+                    if extract_count >= component_threshold: break
+                    extract_count += 1
+                    split_id_list.append(split.cut_id)
+                    # Slice component_list by split_id_list
+                    component_assignment_label1_sliced = []
+                    slice_range = np.insert(sorted(split_id_list), len(split_id_list), len(split_id_list)-1)
+                    u = -1
+                    for v in slice_range:
+                        component_assignment_label1_sliced.append(component_assignment_label1[u+1, v+1])
+
+                    selected_component_count = np.asarray([1, len(component_assignment_label1_sliced)])
+                    selected_component_assignment = [component_assignment_label0, component_assignment_label1_sliced]
+                    # initialize model
+                    if selected_model == 'EM':
+                        model = MultinomialManyToOneEM(testcase_data,
+                                                       component_count_list=selected_component_count,
+                                                       component_assignment_list=selected_component_assignment,
+                                                       epsilon=1e-1)
+                    elif selected_model == 'NB':
+                        # FIXME Change Many-to-one NB here
+                        model = MultinomialNB(testcase_data)
+                    else:
+                        raise SelfException.UnSupportMethod('Only NB or EM option is accepted')
+                    model.train()
+                    model.test()
+                    temp_f1 = metrics.f1_score(model.data.test_y, model.predicted_label)
+                    if temp_f1 > max_f1_score:
+                        max_f1_score = temp_f1
+                        best_split_value = split.cut_value
+                # sum up best_split_value after each try
+                avg_split_value += best_split_value
+
+            # based on what condition comes first: run through all fold or try count passes max_try
+            avg_split_value = avg_split_value / min(n_folds, max_try)
+            logger.info('Average Split Value: ' + str(avg_split_value/min(n_folds, max_try)))
+
+            # After find out avg_split_value, build tree on all training set
+            # and find the cut with smallest absolute distance witht avg_split_value
+            tree = AgglomerativeTree(dataset, metric=distance_metric)
+            hierarchy_scheme = tree.build_hierarchy_scheme_binary_class()
+            # get list id data for each class
+            component_assignment_label0 = hierarchy_scheme[0].element_id_list
+            component_assignment_label1 = hierarchy_scheme[1].element_id_list
+            # get the splitters and find the closest split with avg_split_value
+            split_id_list = []
+            for split in sorted(hierarchy_scheme[1].splitter_list, key=lambda x: x.order, reverse=True):
+                if split.cut_value > avg_split_value: break
+                split_id_list.append(split.cut_id)
+            # split data by split_id_list
+            component_assignment_label1_sliced = []
+            slice_range = np.insert(sorted(split_id_list), len(split_id_list), len(split_id_list) - 1)
+            u = -1
+            for v in slice_range:
+                component_assignment_label1_sliced.append(component_assignment_label1[u + 1, v + 1])
+
+            # assign parameter
+            selected_component_count = np.asarray([1, len(component_assignment_label1)])
+            selected_component_assignment = [component_assignment_label0, component_assignment_label1_sliced]
+            logger.info('Number of component' + str(len(component_assignment_label1_sliced)))
+            return selected_component_count, selected_component_assignment
+        except BaseException:
+            logger.exception('estimated_random_many_one_component BaseException')
+            raise
+
     # II. Data grouping assumption
-    def exp_group_assumption_2a(self, unlabeled_size=5000, n_tries=5,
+    def exp_group_assumption_2a(self, unlabeled_size=4000, n_tries=5,
                                    n_parameter_estimate_tries=5, random_seed=0, epsilon=1e-4):
         """
         Experiment proceduce:
         1. Test with fix large amount of unlabeled data, with small amount of labeled data
-        At each try, parameter will seleected from cross-validation using n_parameter_estimate_tries folds
+        At each try, parameter will be selected from cross-validation using n_parameter_estimate_tries folds
 
         Exp Model
-        NB and EM with 3 different assumption:
+        Only EM original and NB with 3 different assumption:
         - (1) Origin
         - (2) Group with random assignment
         - (3) Group with hierarchy assignment
 
         Expected:
-        - The advantage of EN also be upgraded with assumptions.
+        - The advantage of many-to-one assumption.
 
         Data Reading:
         The func will scan default_dir location and process through all sub-folder in sub_folder_list (one-by-one).
@@ -1161,9 +1432,11 @@ class NewsEvaluation(object):
         logger.info('Start Evaluation - exp_group_assumption_2a')
         logger.info('unlabeled_size: ' + str(unlabeled_size))
         sub_folder_list = self.sub_folder_list_2a
+        # FIXME Add more algorithm here
         nb1_result_filename = 'NB1_2a_result.log'
         em1_result_filename = 'EM1_2a_result.log'
-        # FIXME Add more algorithm here
+        em2_result_filename = 'EM2_2a_result.log'
+        em3_result_filename = 'EM3_2a_result.log'
 
         try:
             for sub_folder in sub_folder_list:
@@ -1182,12 +1455,16 @@ class NewsEvaluation(object):
                         skf = model_selection.StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
 
                         # split train data into 5 overlap parts and get the average
+                        # FIXME Add more algorithm here
                         avg_NB1_result = None
                         avg_EM1_result = None
+                        avg_EM2_result = None
+                        avg_EM3_result = None
                         # FIXME Add more algorithm here
                         nb1_sub_result_filename = str(sub_train_number) + nb1_result_filename
                         em1_sub_result_filename = str(sub_train_number) + em1_result_filename
-                        # FIXME Add more algorithm here
+                        em2_sub_result_filename = str(sub_train_number) + em2_result_filename
+                        em3_sub_result_filename = str(sub_train_number) + em3_result_filename
 
                         loop_count = 0
                         for _, testcase_train_index in skf.split(origin_ssl_data.train_xl, origin_ssl_data.train_yl):
@@ -1200,9 +1477,10 @@ class NewsEvaluation(object):
                             testcase_data.train_yl = origin_ssl_data.train_yl[testcase_train_index]
                             testcase_data.train_labeled_number = len(testcase_train_index)
 
+                            # FIXME Add more algorithm here
                             # Test NB 1
                             logger.info('START: Naive Bayes 1 (origin)')
-                            nb1_model = MultinomialAllLabeled(testcase_data)
+                            nb1_model = MultinomialNB(testcase_data)
                             nb1_model.train()
                             nb1_model.test()
                             temp_result = self.report_export(nb1_model, test_dir + nb1_sub_result_filename,
@@ -1235,20 +1513,54 @@ class NewsEvaluation(object):
                             logger.info('DONE: EM 1 (origin)')
                             logger.info('Loop count: ' + str(em1_model.EM_loop_count))
 
-                            # FIXME Add more algorithm here
-                            # Test NB 2
-
-                            # Test NB 2
-
                             # Test EM 2
+                            logger.info('START: EM 2 (random many-to-one)')
+                            estimated_component = self.estimated_random_many_one_component(
+                                testcase_data, selected_model='EM', n_folds=5, max_try=3, component_threshold=40)
+                            em2_model = MultinomialManyToOneEM(testcase_data, epsilon=epsilon,
+                                                               component_count_list=estimated_component)
+                            em2_model.train()
+                            em2_model.test()
+                            temp_result = self.report_export(em2_model, test_dir + em2_sub_result_filename,
+                                                             extend_file=True, detail_return=True)
+                            if avg_EM2_result is None:
+                                avg_EM2_result = temp_result
+                            else:
+                                avg_EM2_result.accuracy += temp_result.accuracy
+                                avg_EM2_result.precision += temp_result.precision
+                                avg_EM2_result.recall += temp_result.recall
+                                avg_EM2_result.f1 += temp_result.f1
+                                avg_EM2_result.support += temp_result.support
+                            logger.info('DONE: EM 2 (random many-to-one)')
+                            logger.info('Loop count: ' + str(em2_model.EM_loop_count))
 
-                            # Test NB 3
+                            # TODO Test EM 3
+                            logger.info('START: EM 3 (hierarchy tree many-to-one)')
+                            estimated_component_count, estimated_component_assignment = \
+                                self.estimated_tree_many_one_component(
+                                    testcase_data, selected_model='EM', n_folds=5, max_try=3)
+                            em3_model = MultinomialManyToOneEM(testcase_data, epsilon=epsilon,
+                                                               component_count_list=estimated_component_count,
+                                                               component_assignment_list=estimated_component_assignment)
+                            em3_model.train()
+                            em3_model.test()
+                            temp_result = self.report_export(em3_model, test_dir + em3_sub_result_filename,
+                                                             extend_file=True, detail_return=True)
+                            if avg_EM3_result is None:
+                                avg_EM3_result = temp_result
+                            else:
+                                avg_EM3_result.accuracy += temp_result.accuracy
+                                avg_EM3_result.precision += temp_result.precision
+                                avg_EM3_result.recall += temp_result.recall
+                                avg_EM3_result.f1 += temp_result.f1
+                                avg_EM3_result.support += temp_result.support
+                            logger.info('DONE: EM 3 (hierarchy tree many-to-one)')
+                            logger.info('Loop count: ' + str(em3_model.EM_loop_count))
 
-                            # Test EM 3
-
+                            # Test end here
                             loop_count += 1
-
                         # compute average values
+                        # FIXME Add more algorithm here
                         avg_NB1_result.accuracy, avg_NB1_result.precision, \
                         avg_NB1_result.recall, avg_NB1_result.f1, avg_NB1_result.support = \
                             np.divide(avg_NB1_result.accuracy, loop_count), \
@@ -1264,12 +1576,28 @@ class NewsEvaluation(object):
                             np.divide(avg_EM1_result.recall, loop_count), \
                             np.divide(avg_EM1_result.f1, loop_count), \
                             np.divide(avg_EM1_result.support, loop_count)
-                        # FIXME Add more algorithm here
 
+                        avg_EM2_result.accuracy, avg_EM2_result.precision, \
+                        avg_EM2_result.recall, avg_EM2_result.f1, avg_EM2_result.support = \
+                            np.divide(avg_EM2_result.accuracy, loop_count), \
+                            np.divide(avg_EM2_result.precision, loop_count), \
+                            np.divide(avg_EM2_result.recall, loop_count), \
+                            np.divide(avg_EM2_result.f1, loop_count), \
+                            np.divide(avg_EM2_result.support, loop_count)
+
+                        avg_EM3_result.accuracy, avg_EM3_result.precision, \
+                        avg_EM3_result.recall, avg_EM3_result.f1, avg_EM3_result.support = \
+                            np.divide(avg_EM3_result.accuracy, loop_count), \
+                            np.divide(avg_EM3_result.precision, loop_count), \
+                            np.divide(avg_EM3_result.recall, loop_count), \
+                            np.divide(avg_EM3_result.f1, loop_count), \
+                            np.divide(avg_EM3_result.support, loop_count)
+
+                        # FIXME Add more algorithm here
                         self.report_avg_report(test_dir + nb1_sub_result_filename, 'AVERAGE NB1', avg_NB1_result)
                         self.report_avg_report(test_dir + em1_sub_result_filename, 'AVERAGE EM1', avg_EM1_result)
-                        # FIXME Add more algorithm here
-
+                        self.report_avg_report(test_dir + em2_sub_result_filename, 'AVERAGE EM2', avg_EM2_result)
+                        self.report_avg_report(test_dir + em3_sub_result_filename, 'AVERAGE EM3', avg_EM3_result)
         except BaseException:
             logger.exception('exp_group_assumption_2a BaseException')
             raise
@@ -1277,19 +1605,16 @@ class NewsEvaluation(object):
 
 def main():
     try:
-        # if len(sys.argv) > 1:
-        #     list_file = sys.argv[1:]
-        # else:
-        #     list_file = input("command: ").split()
-        evaluation = NewsEvaluation()
-
         # Test I
+        # evaluation = NewsEvaluation()
+        # News dataset
         # evaluation.exp_feature_selection_1a(epsilon=1e-3)
         # evaluation.exp_cooperate_unlabeled_1b(epsilon=1e-3)
 
         # Test II
-        # evaluation.exp_group_assumption_2a(unlabeled_size=7000, epsilon=1e-3)
-        evaluation.exp_group_assumption_2a(unlabeled_size=7000, epsilon=1e-1)
+        evaluation = Reuters21578Evaluation()
+        evaluation.exp_group_assumption_2a(unlabeled_size=4000, n_tries=5, n_parameter_estimate_tries=5, epsilon=1e-1)
+        # evaluation.exp_group_assumption_2a(unlabeled_size=4000, n_tries=5, n_parameter_estimate_tries=5, epsilon=1e-3)
 
         logger.info('Done!')
     except BaseException:

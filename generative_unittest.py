@@ -9,13 +9,16 @@ import copy
 import unittest
 from decimal import *
 import logging
+
 import numpy as np
 import scipy.stats
 from sklearn import metrics
+
 import exceptionHandle as SelfException
 import MMM.NBText as nb
 import Data.data_preprocessing as data_pre
-import Data.origin_data_splitter as origin_data
+import Data.origin_20news_splitter as origin_20news
+import Data.origin_reuters21578_splitter as origin_reuters
 
 logger = logging.getLogger('generative_unittest')
 SelfException.LogHandler('generative_unittest')
@@ -239,13 +242,13 @@ class Preprocessing20NewsTest(unittest.TestCase):
         # check loaded map
         self.assertTrue((loaded_test_scale_expected == self.preprocessing.loaded_test_data).all())
 
-class origin_data_splitter_test(unittest.TestCase):
-    __doc__ = 'test origin_data_splitter'
+class origin_20news_splitter_test(unittest.TestCase):
+    __doc__ = 'test origin_20news_splitter'
 
     @classmethod
     def setUpClass(cls):
-        logger.info('START origin_data_splitter_test')
-        origin_data.merge_origin_file_dir = origin_data.file_dir_list(
+        logger.info('START origin_20news_splitter_test')
+        origin_20news.merge_origin_file_dir = origin_20news.file_dir_list(
             vocabulary_file='Data/20news-bydate/test_data/origin/merge_origin/vocabulary.txt',
             map_input='Data/20news-bydate/test_data/origin/merge_origin/data.map',
             train_input='Data/20news-bydate/test_data/origin/merge_origin/train.data',
@@ -255,7 +258,7 @@ class origin_data_splitter_test(unittest.TestCase):
             data_info='Data/20news-bydate/test_data/origin/merge_origin/info.txt')
 
         # Sorted by data and split with 60-40 train-test scale
-        origin_data.bydate_origin_file_dir = origin_data.file_dir_list(
+        origin_20news.bydate_origin_file_dir = origin_20news.file_dir_list(
             vocabulary_file='Data/20news-bydate/test_data/origin/bydate_origin/vocabulary.txt',
             map_input='Data/20news-bydate/test_data/origin/bydate_origin/data.map',
             train_input='Data/20news-bydate/test_data/origin/bydate_origin/train.data',
@@ -265,7 +268,7 @@ class origin_data_splitter_test(unittest.TestCase):
             data_info='Data/20news-bydate/test_data/origin/bydate_origin/info.txt')
 
         # Sorted by data and split with equal number of instances per class
-        origin_data.equal_class_test_file_dir = origin_data.file_dir_list(
+        origin_20news.equal_class_test_file_dir = origin_20news.file_dir_list(
             vocabulary_file='Data/20news-bydate/test_data/origin/equal_class_test_data/vocabulary.txt',
             map_input='Data/20news-bydate/test_data/origin/equal_class_test_data/data.map',
             train_input='Data/20news-bydate/test_data/origin/equal_class_test_data/train.data',
@@ -281,7 +284,7 @@ class origin_data_splitter_test(unittest.TestCase):
         """
         logger.info('START test_merge_origin_data')
         expected_counter = 10
-        counter = origin_data.merge_origin_data()
+        counter = origin_20news.merge_origin_data()
         self.assertEqual(expected_counter, counter, 'test_merge_origin_data: merged data is not match')
 
         # test expected train data
@@ -292,13 +295,13 @@ class origin_data_splitter_test(unittest.TestCase):
                           (7, 10, 1), (8, 2, 3), (8, 3, 3), (8, 5, 1), (8, 6, 1), (8, 7, 1), (8, 9, 8),
                           (8, 10, 5), (9, 1, 4), (9, 2, 2), (9, 3, 10), (9, 4, 4), (9, 5, 2), (9, 6, 1),
                           (9, 7, 1), (9, 8, 1), (9, 9, 3), (9, 10, 9), (10, 1, 2), (10, 2, 4), (10, 7, 1)]
-        train_load = np.loadtxt(origin_data.merge_origin_file_dir.train_input, dtype='int')
+        train_load = np.loadtxt(origin_20news.merge_origin_file_dir.train_input, dtype='int')
         for tup_id, _ in enumerate(train_load):
             self.assertTrue(all(expected_train[tup_id] == train_load[tup_id]))
 
         # test expected test data
         expected_test = [1, 1, 2, 2, 3, 3, 3, 3, 5, 5]
-        test_load = np.loadtxt(origin_data.merge_origin_file_dir.train_label_input, dtype='int')
+        test_load = np.loadtxt(origin_20news.merge_origin_file_dir.train_label_input, dtype='int')
         self.assertTrue(all(test_load == expected_test))
 
     def test_equal_class_test_data_generator(self):
@@ -308,11 +311,11 @@ class origin_data_splitter_test(unittest.TestCase):
         :return:
         """
         logger.info('START test_equal_class_test_data_generator')
-        origin_data.equal_class_test_data_generator(test_instance_per_class=1)
-        train_load = np.loadtxt(origin_data.equal_class_test_file_dir.train_input)
-        train_label_load = np.loadtxt(origin_data.equal_class_test_file_dir.train_label_input)
-        test_load = np.loadtxt(origin_data.equal_class_test_file_dir.test_input)
-        test_label_load = np.loadtxt(origin_data.equal_class_test_file_dir.test_label_input)
+        origin_20news.equal_class_test_data_generator(test_instance_per_class=1)
+        train_load = np.loadtxt(origin_20news.equal_class_test_file_dir.train_input)
+        train_label_load = np.loadtxt(origin_20news.equal_class_test_file_dir.train_label_input)
+        test_load = np.loadtxt(origin_20news.equal_class_test_file_dir.test_input)
+        test_label_load = np.loadtxt(origin_20news.equal_class_test_file_dir.test_label_input)
 
         train_expected = [(1, 3, 1), (1, 10, 1), (2, 2, 3), (2, 3, 3), (2, 5, 1), (2, 6, 1),
                                 (2, 7, 1), (2, 9, 8), (2, 10, 5), (3, 2, 8), (3, 3, 8), (3, 7, 1),
@@ -334,6 +337,175 @@ class origin_data_splitter_test(unittest.TestCase):
         for tup_id, _ in enumerate(test_load):
             self.assertTrue(all(test_expected[tup_id] == test_load[tup_id]))
         self.assertTrue(all(test_label_expected == test_label_load))
+
+class origin_reuters21578_splitter_test(unittest.TestCase):
+
+    demo_export_file_list = origin_reuters.export_file_location_list(
+        'Data/reuters21578/test_data/final/', '/news.map.csv', '/news.train.csv', '/news.test.csv', '/data_info.txt')
+    X = np.asarray([[2., 10., 4., 2., 1., 1., 3., 9., 4.],
+                    [4., 0., 0., 0., 0., 1., 0., 0., 4.],
+                    [3., 3., 0., 1., 1., 1., 8., 5., 1.],
+                    [2., 0., 0., 0., 0., 0., 4., 0., 1.],
+                    [8., 8., 0., 0., 0., 1., 6., 1., 2.],
+                    [2., 1., 0., 0., 0., 0., 4., 5., 2.],
+                    [0., 1., 0., 0., 0., 0., 0., 1., 0.],
+                    [2., 0., 0., 0., 0., 1., 4., 1., 2.],
+                    [3., 3., 0., 1., 1., 1., 8., 5., 2.],
+                    [2., 3., 0., 0., 1., 0., 0., 0., 0.]])
+    y = np.asarray([3, 3, 1, 1, 2, 2, 0, 2, 2, 0])
+    @classmethod
+    def setUpClass(cls):
+        logger.info('START origin_reuters21578_splitter_test')
+
+        cls.preprocessing = origin_reuters.data_preprocessing(cls.X, cls.y, test_size=.3, root_folder='')
+        cls.preprocessing.file_list = cls.demo_export_file_list
+
+    def test_mutual_information_extract(self):
+        logger.info('START test_mutual_information_extract')
+        """
+        y train
+        [0, 3, 0, 2, 1, 3, 2]
+        
+        X train
+        [2.   3.   0.   0.   1.   0.   0.   0.   0.]
+        [4.   0.   0.   0.   0.   1.   0.   0.   4.]
+        [0.   1.   0.   0.   0.   0.   0.   1.   0.]  
+        [2.   0.   0.   0.   0.   1.   4.   1.   2.]
+        [2.   0.   0.   0.   0.   0.   4.   0.   1.]  
+        [2.   10.   4.   2.   1.   1.   3.   9.   4.]
+        [2.   1.   0.   0.   0.   0.   4.   5.   2.]  
+        
+        [column 0] 
+        X[:, 0]	2 4 0 2 2 2 2
+        y       0 3 0 2 1 3 2
+        [occurence]  0 2 4
+                  0 |1 1 0 
+                  1 |0 1 0
+                  2 |0 2 0
+                  3 |0 1 1
+        
+        [column 1]
+        X[:, 1] 3 0 1 0 0 10 1
+        y       0 3 0 2 1 3  2
+        [occurence]  0 1 3 10
+                  0 |0 1 1 0 
+                  1 |1 0 0 0
+                  2 |1 1 0 0
+                  3 |1 0 0 1
+        
+        [column 2]
+        X[:, 2]	0 0 0 0 0 4 0
+        y       0 3 0 2 1 3 2
+        [occurence]  0 4
+                  0 |2 0 
+                  1 |1 0
+                  2 |2 0
+                  3 |1 1
+        
+        [column 3]
+        X[:, 3]	0 0 0 0 0 2 0
+        y       0 3 0 2 1 3 2
+        [occurence]  0 2
+                  0 |2 0
+                  1 |1 0
+                  2 |2 0
+                  3 |1 1
+        
+        [column 4]
+        X[:, 4]	1 0 0 0 0 1 0
+        y       0 3 0 2 1 3 2
+        [occurence]  0 1
+                  0 |1 1
+                  1 |1 0
+                  2 |2 0
+                  3 |1 1
+        
+        [column 5]
+        X[:, 5]	0 1 0 1 0 1 0
+        y       0 3 0 2 1 3 2
+        [occurence]  0 1
+                  0 |2 0
+                  1 |1 0
+                  2 |1 1
+                  3 |0 2
+        
+        [column 6]
+        X[:, 6]	0 0 0 4 4 3 4
+        y       0 3 0 2 1 3 2
+        [occurence]  0 3 4
+                  0 |2 0 0
+                  1 |0 0 1
+                  2 |0 0 2
+                  3 |1 1 0
+        
+        [column 7]
+        X[:, 7]	0 0 1 1 0 9 5
+        y       0 3 0 2 1 3 2
+        [occurence]  0 1 5 9
+                  0 |1 1 0 0
+                  1 |1 0 0 0
+                  2 |0 1 1 0
+                  3 |1 0 0 1
+        
+        [column 8]
+        X[:, 8]	0 4 0 2 1 4 2
+        y       0 3 0 2 1 3 2
+        [occurence]  0 1 2 4
+                  0 |2 0 0 0
+                  1 |0 1 0 0
+                  2 |0 0 2 0
+                  3 |0 0 0 2
+        classes_pr only count
+        [18. 9. 18. 18.]
+        
+        occurrences_pr only count
+        [1. 5. 1. 3. 2. 1. 1. 6. 1. 6. 1. 5. 2. 4. 3. 3. 1. 3. 3. 2. 1. 1. 2. 1. 2. 2.]
+        
+        expected_vocabulary_occurrences_by_class_pr only count
+        [[1. 1. 0. 0. 1. 1. 0. 2. 0. 2. 0. 1. 1. 2. 0. 2. 0. 0. 1. 1. 0. 0. 2. 0. 0. 0.]
+        [0. 1. 0. 1. 0. 0. 0. 1. 0. 1. 0. 1. 0. 1. 0. 0. 0. 1. 1. 0. 0. 0. 0. 1. 0. 0.]
+        [0. 2. 0. 1. 1. 0. 0. 2. 0. 2. 0. 2. 0. 1. 1. 0. 0. 2. 0. 1. 1. 0. 0. 0. 2. 0.]
+        [0. 1. 1. 1. 0. 0. 1. 1. 1. 1. 1. 1. 1. 0. 2. 1. 1. 0. 1. 0. 0. 1. 0. 0. 0. 2.]]
+        """
+        expected_classes_pr = [0.2857142857142857, 0.14285714285714285, 0.2857142857142857, 0.2857142857142857]
+        expected_occurrences_pr = [0.01587302, 0.07936508, 0.01587302, 0.04761905, 0.03174603, 0.01587302,
+                                   0.01587302, 0.0952381, 0.01587302, 0.0952381, 0.01587302, 0.07936508,
+                                   0.03174603, 0.06349206, 0.04761905, 0.04761905, 0.01587302, 0.04761905,
+                                   0.04761905, 0.03174603, 0.01587302, 0.01587302, 0.03174603, 0.01587302,
+                                   0.03174603, 0.03174603]
+        expected_vocabulary_occurrences_by_class_pr = [
+            [0.01587302, 0.01587302, 0., 0., 0.01587302, 0.01587302, 0., 0.03174603, 0., 0.03174603, 0.,
+             0.01587302, 0.01587302, 0.03174603, 0., 0.03174603, 0., 0., 0.01587302, 0.01587302, 0., 0.,
+             0.03174603, 0., 0., 0.],
+            [0., 0.01587302, 0., 0.01587302, 0., 0., 0., 0.01587302, 0., 0.01587302, 0., 0.01587302, 0.,
+             0.01587302, 0., 0., 0., 0.01587302, 0.01587302, 0., 0., 0., 0., 0.01587302, 0., 0.],
+            [0., 0.03174603, 0., 0.01587302, 0.01587302, 0., 0., 0.03174603, 0., 0.03174603, 0., 0.03174603,
+             0., 0.01587302, 0.01587302, 0., 0., 0.03174603, 0., 0.01587302, 0.01587302, 0., 0., 0., 0.03174603, 0.],
+            [0., 0.01587302, 0.01587302, 0.01587302, 0., 0., 0.01587302, 0.01587302, 0.01587302, 0.01587302,
+             0.01587302, 0.01587302, 0.01587302, 0., 0.03174603, 0.01587302, 0.01587302, 0., 0.01587302,
+             0., 0., 0.01587302, 0., 0., 0., 0.03174603]]
+        expected_mi_rank_list = [4, 2, 3, 0, 5, 1, 7, 6, 8]
+
+        classes_pr, occurrences_pr, vocabulary_occurrences_by_class_pr, mi_rank_list = \
+            self.preprocessing.mutual_information_extract()
+
+        self.assertTrue(all(expected_classes_pr == classes_pr))
+        self.assertTrue(all(np.isclose(expected_occurrences_pr, occurrences_pr)))
+        self.assertTrue(np.isclose(expected_vocabulary_occurrences_by_class_pr,
+                                   vocabulary_occurrences_by_class_pr).all())
+        self.assertTrue(all(expected_mi_rank_list == mi_rank_list))
+
+    def test_data_mi_selection_export(self):
+        # get MI rank link first
+        self.preprocessing.mutual_information_extract()
+        # no_scale first
+        self.preprocessing.data_mi_selection_export(selected_word_number=-1, scale_length=-1,
+                                                    extract_to_file=True, subfolder='no_scale')
+        self.preprocessing.data_mi_selection_export(selected_word_number=-1, scale_length=5,
+                                                    extract_to_file=True, subfolder='scale')
+        self.preprocessing.data_mi_selection_export(selected_word_number=5, binary_test_class=2, scale_length=5,
+                                                    extract_to_file=True, subfolder='scale_bin2')
+        # TODO Design test here
 
 
 #
@@ -493,11 +665,15 @@ class AgglomerativeTreeTest(unittest.TestCase):
         # test bin-bin
         bin_to_bin_expected = nb.hierarchy_tree(sum_vector=np.asarray([36, 36, 42, 44]),
                                                 element_id_list=[0, 1, 2, 3, 4, 5, 8, 9, 6, 7],
-                                                splitter_list=[nb.splitter(id=0, order=0), nb.splitter(id=2, order=1),
-                                                               nb.splitter(id=4, order=2), nb.splitter(id=3, order=5),
-                                                               nb.splitter(id=6, order=4), nb.splitter(id=5, order=6),
-                                                               nb.splitter(id=1, order=7), nb.splitter(id=8, order=3),
-                                                               nb.splitter(id=7, order=8)])
+                                                splitter_list=[nb.splitter(cut_id=0, cut_value=0, order=0),
+                                                               nb.splitter(cut_id=2, cut_value=0, order=1),
+                                                               nb.splitter(cut_id=4, cut_value=0, order=2),
+                                                               nb.splitter(cut_id=3, cut_value=1.1794871794871795, order=5),
+                                                               nb.splitter(cut_id=6, cut_value=0, order=4),
+                                                               nb.splitter(cut_id=5, cut_value=1.5343441724515894, order=6),
+                                                               nb.splitter(cut_id=1, cut_value=1.5977289377289376, order=7),
+                                                               nb.splitter(cut_id=8, cut_value=0, order=3),
+                                                               nb.splitter(cut_id=7, cut_value=2.6924196174196178, order=8)])
         model = nb.AgglomerativeTree(self.empty_data, 'bin_bin_distance')
         bin_bin_data = copy.deepcopy(self.data_group)
         result = model.build_hierarchy_tree(bin_bin_data)
@@ -511,11 +687,15 @@ class AgglomerativeTreeTest(unittest.TestCase):
         # test match
         march_expected = nb.hierarchy_tree(sum_vector=np.asarray([36, 36, 42, 44]),
                                            element_id_list=[0, 1, 2, 3, 4, 5, 8, 9, 6, 7],
-                                           splitter_list=[nb.splitter(id=0, order=0), nb.splitter(id=2, order=1),
-                                                          nb.splitter(id=4, order=2), nb.splitter(id=6, order=4),
-                                                          nb.splitter(id=5, order=5), nb.splitter(id=8, order=3),
-                                                          nb.splitter(id=7, order=6), nb.splitter(id=3, order=7),
-                                                          nb.splitter(id=1, order=8)])
+                                           splitter_list=[nb.splitter(cut_id=0, cut_value=0, order=0),
+                                                          nb.splitter(cut_id=2, cut_value=0, order=1),
+                                                          nb.splitter(cut_id=4, cut_value=0, order=2),
+                                                          nb.splitter(cut_id=6, cut_value=0, order=4),
+                                                          nb.splitter(cut_id=5, cut_value=5, order=5),
+                                                          nb.splitter(cut_id=8, cut_value=0, order=3),
+                                                          nb.splitter(cut_id=7, cut_value=6.5, order=6),
+                                                          nb.splitter(cut_id=3, cut_value=13.333333333333336, order=7),
+                                                          nb.splitter(cut_id=1, cut_value=22.5, order=8)])
 
         model = nb.AgglomerativeTree(self.empty_data, 'match_distance')
         match_data = copy.deepcopy(self.data_group)
@@ -667,7 +847,7 @@ class MultinomialAllLabeledTest(unittest.TestCase):
         data_ssl = nb.SslDataset(data, 0.1)
 
         # [dataset]
-        cls.model = nb.MultinomialAllLabeled(data_ssl)
+        cls.model = nb.MultinomialNB(data_ssl)
         cls.model.train()
         cls.model.test()
 
@@ -836,15 +1016,15 @@ class MultinomialManyToOneTest(unittest.TestCase):
         """
         logger.info('START test_equal_sampling')
         test_size_1 = 10
-        result_1 = nb.MultinomialManyToOne.equal_sampling(test_size_1)
+        result_1 = nb.MultinomialManyToOneEM.equal_sampling(test_size_1)
         self.assertEqual(1, result_1.sum(), 'test_equal_sampling: Fail in test 1')
 
         test_size_2 = 100
-        result_2 = nb.MultinomialManyToOne.equal_sampling(test_size_2)
+        result_2 = nb.MultinomialManyToOneEM.equal_sampling(test_size_2)
         self.assertEqual(1, result_2.sum(), 'test_equal_sampling: Fail in test 2')
 
         test_size_3 = 1234
-        result_3 = nb.MultinomialManyToOne.equal_sampling(test_size_3)
+        result_3 = nb.MultinomialManyToOneEM.equal_sampling(test_size_3)
         self.assertEqual(1, result_3.sum(), 'test_equal_sampling: Fail in test 3')
 
     def test_argument_estimate_one_one_component(self):
@@ -862,7 +1042,7 @@ class MultinomialManyToOneTest(unittest.TestCase):
         data.load_from_csv(list_file)
         data_ssl = nb.SslDataset(data, unlabeled_size=.4)
         # [dataset, component_count_list, component_assignment_list=None]
-        model = nb.MultinomialManyToOne(data_ssl, np.full((self.test_generator_1.class_number, 1), 1))
+        model = nb.MultinomialManyToOneEM(data_ssl, np.full((self.test_generator_1.class_number, 1), 1))
         model.train()
         model.test()
 
@@ -907,7 +1087,7 @@ class MultinomialManyToOneTest(unittest.TestCase):
         data_ssl = nb.SslDataset(data, unlabeled_size=.4)
         # [dataset, component_count_list, component_assignment_list=None]
         # 2 component per class
-        model = nb.MultinomialManyToOne(data_ssl, np.full((self.test_generator_1.class_number, 1), 2))
+        model = nb.MultinomialManyToOneEM(data_ssl, np.full((self.test_generator_1.class_number, 1), 2))
         model.train()
         model.test()
 
@@ -980,9 +1160,8 @@ class NewsEvaluationTest(unittest.TestCase):
         logger.info('START NewsEvaluationTest')
         cls.sub_folder_1a = ['1a_scale/', '1a_no_scale/']
         cls.sub_folder_1b = ['1b_scale/', '1b_no_scale/']
-        cls.sub_folder_2a = ['2a/']
 
-    def _exp_feature_selection_1a(self):
+    def test_exp_feature_selection_1a(self):
         logger.info('START test_exp_feature_selection_1a')
         exception_raise = False
         try:
@@ -1018,10 +1197,9 @@ class NewsEvaluationTest(unittest.TestCase):
         except BaseException:
             exception_raise = True
             raise
-
         self.assertFalse(exception_raise, 'test_exp_feature_selection_1a: Exception raised!')
 
-    def _exp_cooperate_unlabeled_1b(self):
+    def test_exp_cooperate_unlabeled_1b(self):
         logger.info('START test_exp_cooperate_unlabeled_1b')
         exception_raise = False
         try:
@@ -1058,8 +1236,19 @@ class NewsEvaluationTest(unittest.TestCase):
         except BaseException:
             exception_raise = True
             raise
-
         self.assertFalse(exception_raise, 'test_exp_cooperate_unlabeled_1b: Exception raised!')
+
+
+class Reuters21578EvaluationTest(unittest.TestCase):
+    __doc__ = 'This test mostly only create test data and no exception is raised' \
+              'And you should hand check the exported folders are same as expected®'
+
+    default_export_filename_list = ['news.map.csv', 'news.train.csv', 'news.test.csv']
+
+    @classmethod
+    def setUpClass(cls):
+        logger.info('START Reuters21578EvaluationTest')
+        cls.sub_folder_2a = ['2a_reuters_test_scale_3/']
 
     def test_exp_group_assumption_2a(self):
         logger.info('START test_exp_group_assumption_2a')
@@ -1069,10 +1258,8 @@ class NewsEvaluationTest(unittest.TestCase):
             test_generator = DataTestGenerator(
                 np.vstack(
                     [np.asarray([0.25, 0.25, 0.25, 0.25]),
-                     np.asarray([0.3, 0.4, 0.2, 0.1]),
-                     np.asarray([0.2, 0.2, 0.2, 0.4]),
-                     np.asarray([0.1, 0.3, 0.3, 0.3])]),
-                np.asarray([0.2, 0.5, 0.15, 0.15]),
+                     np.asarray([0.3, 0.4, 0.2, 0.1])]),
+                np.asarray([0.3, 0.7]),
                 train_size=1000,
                 total_word_count=100,
                 test_size_per_class=10)
@@ -1091,15 +1278,16 @@ class NewsEvaluationTest(unittest.TestCase):
                     test_generator.csv_export('MMM/', export_name_list=filename_list)
 
             # test model
-            evaluation = nb.NewsEvaluation()
+            evaluation = nb.Reuters21578Evaluation()
             evaluation.default_dir = 'MMM/test_data/'
-            evaluation.approximate_labeled_sizes_2a = [10, 20, 30, 50]
+            evaluation.approximate_labeled_sizes_2a = [100, 200]
             evaluation.exp_group_assumption_2a(unlabeled_size=400, n_tries=3, n_parameter_estimate_tries=2)
         except BaseException:
             exception_raise = True
             raise
-
         self.assertFalse(exception_raise, 'test_exp_group_assumption_2a: Exception raised!')
+
+
 #
 # main
 #
@@ -1117,11 +1305,11 @@ def main():
     mmm_test = [UtilityTest, MultinomialAllLabeledTest, MultinomialEMTest,
                 AgglomerativeTreeTest, MultinomialManyToOneTest]
 
-    data_preprocessing_test = [Preprocessing20NewsTest, origin_data_splitter_test]
+    data_preprocessing_test = [Preprocessing20NewsTest, origin_20news_splitter_test, origin_reuters21578_splitter_test]
 
-    evaluation_test = [NewsEvaluationTest]
+    evaluation_test = [NewsEvaluationTest, Reuters21578EvaluationTest]
 
-    temp_test = [NewsEvaluationTest]
+    temp_test = [Reuters21578EvaluationTest]
 
     # list of all desired tests
     # require_test = 'mmm_test data_preprocessing_test evaluation_test'
