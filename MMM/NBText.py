@@ -183,6 +183,20 @@ class Utility(object):
         # return np.exp(result)
         return Decimal(result).exp()
 
+    @staticmethod
+    def equal_sampling(component_number):
+        """
+        Return a list component_number elements of uniform samplings with constraint sum all element is 1
+        :param component_number: number of component for of class
+        :return: list of randomly sampling component for one class
+        """
+        samples = np.random.uniform(0, 1, component_number - 1)
+        samples = np.append(samples, [0, 1])
+        samples.sort()
+        for i in range(len(samples) - 1):
+            samples[i] = samples[i + 1] - samples[i]
+        return samples[:-1]
+
 
 class MultinomialNB(object):
     __doc__ = 'Deploy all labeled data Naive Bayes Multinomial model for text classification; ' \
@@ -403,6 +417,107 @@ class MultinomialEM(object):
             self.predicted_label[i, 0] = max_id
 
 
+class MultinomialManyToOneNB(object):
+    __doc__ = 'Deploy all labeled data Naive Bayes using many-to-one assumption for text classification; ' \
+              'MLE derivative solution; ' \
+              'This only work with SslDataset data (using train_xl).'
+
+    def __init__(self, dataset, component_count_list, component_assignment_list=None):
+        try:
+            if type(dataset) is not SslDataset: raise SelfException.DataTypeConstraint('Dataset type is not SslDataset')
+            self.data = dataset
+
+            # component count list
+            if len(component_count_list) != self.data.class_number:
+                raise SelfException.MismatchLengthComponentList(
+                    'Component list has different length with number of classes')
+            if type(component_count_list) is not np.ndarray:
+                raise SelfException.ComponentCountIsList(
+                    'Component count must be a np.ndarray')
+            self.component_count_list = component_count_list
+            self.component_number = component_count_list.sum()
+            self.component_count_cumulative = np.zeros(self.data.class_number + 1).astype(int)
+            self.component_assignment_list = component_assignment_list
+
+            # parameters set
+            #  class prior probability [P(y1) ... P(yc)]
+            self.prior_pr = np.zeros(self.component_number)
+            #  word conditional probability per class [ [P(wi|y1)] ... [P(wi|yc)] ], i=1..d
+            self.word_pr = np.zeros((self.component_number, self.data.feature_number))
+
+            # predicted label
+            # note: matrix type here, in the same type with data.test_y
+            self.predicted_label = np.zeros((self.data.test_number, 1))
+
+        except SelfException.DataTypeConstraint as e:
+            logger.exception('MultinomialAllLabeled SelfException.DataTypeConstraint')
+            e.recall_traceback(sys.exc_info())
+
+        except BaseException:
+            logger.exception('MultinomialAllLabeled BaseException')
+            raise
+
+    def train(self):
+        """Training model"""
+        # init constants
+        l = self.data.train_labeled_number
+        c = self.data.class_number
+        d = self.data.feature_number
+        m = self.component_number
+
+        self.component_count_cumulative[0] = 0
+        for i in range(1, c + 1):
+            self.component_count_cumulative[i] = self.component_count_cumulative[i - 1] + \
+                                                 self.component_count_list[i - 1]
+
+        # init delta
+        delta = [[Decimal(0) for j in range(m)] for i in range(l)]
+        for i in range(l):
+            label = int(self.data.train_yl[i])
+            if self.component_assignment_list is None:
+                # random sampling
+                sampling = Utility.equal_sampling(self.component_count_list[label])
+                for j in range(self.component_count_cumulative[label], self.component_count_cumulative[label + 1]):
+                    delta[i][j] = Decimal(sampling[j - self.component_count_cumulative[label]])
+            else:
+                # sample from prior assigned component
+                for class_id, class_component in enumerate(self.component_assignment_list):
+                    for component_id, component_list in enumerate(class_component):
+                        for data in component_list:
+                            component_location = self.component_count_cumulative[class_id] + component_id
+                            delta[data][component_location] = Decimal(1)
+
+        # estimate
+        for i in range(l):
+            label = int(self.data.train_yl[i])
+            for j in range(self.component_count_cumulative[label], self.component_count_cumulative[label + 1]):
+                self.prior_pr[j] += float(delta[i][j])
+                self.word_pr[j] = self.word_pr[j] + float(delta[i][j]) * self.data.train_xl[i]
+        # add-one smoothing in use
+        #  class prior probability
+        self.prior_pr[:] += 1
+        self.prior_pr = np.divide(self.prior_pr, float(self.data.train_labeled_number + m))
+        #  word conditional probability
+        sum_word_pr = self.word_pr.sum(axis=1)
+        self.word_pr[:] += 1
+        self.word_pr = (self.word_pr.T / (sum_word_pr + self.data.feature_number)).T
+
+    def test(self):
+        """Estimated value of x for each class"""
+        estimate_value = [[Decimal(0) for j in range(self.data.class_number)] for i in range(self.data.test_number)]
+        for i in range(self.data.test_number):
+            max_val = 0
+            max_id = -1
+            for j in range(self.data.class_number):
+                for k in range(self.component_count_cumulative[j], self.component_count_cumulative[j+1]):
+                    estimate_value[i][j] += Decimal(self.prior_pr[k]) * \
+                                            Utility.multinomial(self.data.test_x[i], self.word_pr[k])
+                if max_val < estimate_value[i][j]:
+                    max_val = estimate_value[i][j]
+                    max_id = j
+            self.predicted_label[i, 0] = max_id
+
+
 class MultinomialManyToOneEM(object):
     __doc__ = 'Deploy Semi-supervised Multinomial model for text classification; ' \
               'many to one assumption, EM algorithm; ' \
@@ -457,20 +572,6 @@ class MultinomialManyToOneEM(object):
             logger.exception('MultinomialManyToOne BaseException')
             raise
 
-    @staticmethod
-    def equal_sampling(component_number):
-        """
-        Return a list component_number elements of uniform samplings with constraint sum all element is 1
-        :param component_number: number of component for of class
-        :return: list of randomly sampling component for one class
-        """
-        samples = np.random.uniform(0, 1, component_number-1)
-        samples = np.append(samples, [0, 1])
-        samples.sort()
-        for i in range(len(samples) - 1):
-            samples[i] = samples[i+1] - samples[i]
-        return samples[:-1]
-
     def train(self):
         """Training model"""
         # init constants
@@ -490,7 +591,7 @@ class MultinomialManyToOneEM(object):
             label = int(self.data.train_yl[i])
             if self.component_assignment_list is None:
                 # random sampling
-                sampling = self.equal_sampling(self.component_count_list[label])
+                sampling = Utility.equal_sampling(self.component_count_list[label])
                 for j in range(self.component_count_cumulative[label], self.component_count_cumulative[label+1]):
                     delta[i][j] = Decimal(sampling[j-self.component_count_cumulative[label]])
             else:
@@ -1147,6 +1248,7 @@ class NewsEvaluation(object):
             logger.exception('exp_cooperate_unlabeled_1b BaseException')
             raise
 
+
 class Reuters21578Evaluation(object):
     __doc__ = 'Evaluation methods using Reuters21578 dataset' \
               'Data 11367' \
@@ -1245,13 +1347,13 @@ class Reuters21578Evaluation(object):
             raise SelfException.UnSupportMethod('Only supports binary classification')
         selected_parameter = np.asarray([1, 1])
         try:
-            try_count = 0
-            skf = model_selection.StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=113)
+            skf = model_selection.StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=0)
             max_f1 = -1
             best_component = 1
             for i in range(1, component_threshold):
                 selected_parameter[1] = i
                 avg_f1 = 0
+                try_count = 0
                 for train_index, test_index in skf.split(dataset.train_xl, dataset.train_yl):
                     try_count += 1
                     if try_count > max_try: break
@@ -1278,7 +1380,7 @@ class Reuters21578Evaluation(object):
                     max_f1 = avg_f1
                     best_component = i
             selected_parameter[1] = best_component
-            logger.info('Best component: ' + str(best_component))
+            logger.info('Best component number: ' + str(best_component))
         except BaseException:
             logger.exception('estimated_random_many_one_component BaseException')
             raise
@@ -1300,13 +1402,14 @@ class Reuters21578Evaluation(object):
         :param distance_metric: type of distance method using for building tree
         :return:
         """
+        # TODO Estimate with no split (only 1 group)  case
         logger.info('START estimated_tree_many_one_component')
         if dataset.class_number > 2:
             raise SelfException.UnSupportMethod('Only supports binary classification')
         try:
             try_count = 0
             avg_split_value = 0
-            skf = model_selection.StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=113)
+            skf = model_selection.StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=0)
             for train_index, test_index in skf.split(dataset.train_xl, dataset.train_yl):
                 try_count += 1
                 if try_count > max_try: break
@@ -1344,10 +1447,10 @@ class Reuters21578Evaluation(object):
                     slice_range = np.insert(sorted(split_id_list), len(split_id_list), len(split_id_list)-1)
                     u = -1
                     for v in slice_range:
-                        component_assignment_label1_sliced.append(component_assignment_label1[u+1, v+1])
+                        component_assignment_label1_sliced.append(component_assignment_label1[u+1:v+1])
 
                     selected_component_count = np.asarray([1, len(component_assignment_label1_sliced)])
-                    selected_component_assignment = [component_assignment_label0, component_assignment_label1_sliced]
+                    selected_component_assignment = [[component_assignment_label0], component_assignment_label1_sliced]
                     # initialize model
                     if selected_model == 'EM':
                         model = MultinomialManyToOneEM(testcase_data,
@@ -1382,27 +1485,29 @@ class Reuters21578Evaluation(object):
             # get the splitters and find the closest split with avg_split_value
             split_id_list = []
             for split in sorted(hierarchy_scheme[1].splitter_list, key=lambda x: x.order, reverse=True):
-                if split.cut_value > avg_split_value: break
                 split_id_list.append(split.cut_id)
+                if split.cut_value > avg_split_value: break
+
             # split data by split_id_list
             component_assignment_label1_sliced = []
             slice_range = np.insert(sorted(split_id_list), len(split_id_list), len(split_id_list) - 1)
             u = -1
             for v in slice_range:
-                component_assignment_label1_sliced.append(component_assignment_label1[u + 1, v + 1])
+                component_assignment_label1_sliced.append(component_assignment_label1[u+1:v+1])
 
             # assign parameter
             selected_component_count = np.asarray([1, len(component_assignment_label1)])
-            selected_component_assignment = [component_assignment_label0, component_assignment_label1_sliced]
-            logger.info('Number of component' + str(len(component_assignment_label1_sliced)))
+            selected_component_assignment = [[component_assignment_label0], component_assignment_label1_sliced]
+            logger.info('Number of component: ' + str(len(component_assignment_label1_sliced)))
             return selected_component_count, selected_component_assignment
         except BaseException:
             logger.exception('estimated_random_many_one_component BaseException')
             raise
 
     # II. Data grouping assumption
-    def exp_group_assumption_2a(self, unlabeled_size=4000, n_tries=5,
-                                   n_parameter_estimate_tries=5, random_seed=0, epsilon=1e-4):
+    def exp_group_assumption_2a(self, unlabeled_size=4000, n_tries=5, parameter_estimate_fold=5,
+                                max_tries_parameter_estimate = 5, component_threshold=50,
+                                random_seed=0, epsilon=1e-4):
         """
         Experiment proceduce:
         1. Test with fix large amount of unlabeled data, with small amount of labeled data
@@ -1423,8 +1528,10 @@ class Reuters21578Evaluation(object):
         The process will perform the algorithm and return the result file in the same folder of each test case.
         :param unlabeled_size: int, default=5000, size of unlabeled data
         :param n_tries: int, default=5, number of re-train times
-        :param n_parameter_estimate_tries: positive int, default=5,
+        :param parameter_estimate_fold: positive int, default=5,
                                             number of fold use for parameter estimate(group speading) at each try
+        :param max_tries_parameter_estimate: int, default 5, maximum number of tries run when estimate parameter
+        :param component_threshold: maximum number of groups search when estimate papameter
         :param random_seed: int, default=0, seed of random generator
         :param epsilon: default 1e-4, MLE convergence threshold for EM based algorithm
         :return:
@@ -1434,6 +1541,8 @@ class Reuters21578Evaluation(object):
         sub_folder_list = self.sub_folder_list_2a
         # FIXME Add more algorithm here
         nb1_result_filename = 'NB1_2a_result.log'
+        nb2_result_filename = 'NB2_2a_result.log'
+        nb3_result_filename = 'NB3_2a_result.log'
         em1_result_filename = 'EM1_2a_result.log'
         em2_result_filename = 'EM2_2a_result.log'
         em3_result_filename = 'EM3_2a_result.log'
@@ -1457,11 +1566,15 @@ class Reuters21578Evaluation(object):
                         # split train data into 5 overlap parts and get the average
                         # FIXME Add more algorithm here
                         avg_NB1_result = None
+                        avg_NB2_result = None
+                        avg_NB3_result = None
                         avg_EM1_result = None
                         avg_EM2_result = None
                         avg_EM3_result = None
                         # FIXME Add more algorithm here
                         nb1_sub_result_filename = str(sub_train_number) + nb1_result_filename
+                        nb2_sub_result_filename = str(sub_train_number) + nb2_result_filename
+                        nb3_sub_result_filename = str(sub_train_number) + nb3_result_filename
                         em1_sub_result_filename = str(sub_train_number) + em1_result_filename
                         em2_sub_result_filename = str(sub_train_number) + em2_result_filename
                         em3_sub_result_filename = str(sub_train_number) + em3_result_filename
@@ -1513,10 +1626,35 @@ class Reuters21578Evaluation(object):
                             logger.info('DONE: EM 1 (origin)')
                             logger.info('Loop count: ' + str(em1_model.EM_loop_count))
 
+                            # Test NB 2
+                            logger.info('START: Naive Bayes 2 (random many-to-one)')
+                            estimated_component = self.estimated_random_many_one_component(
+                                testcase_data, selected_model='NB',
+                                n_folds=parameter_estimate_fold,
+                                max_try=max_tries_parameter_estimate,
+                                component_threshold=component_threshold)
+                            nb2_model = MultinomialManyToOneNB(testcase_data, component_count_list=estimated_component)
+                            nb2_model.train()
+                            nb2_model.test()
+                            temp_result = self.report_export(nb2_model, test_dir + nb2_sub_result_filename,
+                                                             extend_file=True, detail_return=True)
+                            if avg_NB2_result is None:
+                                avg_NB2_result = temp_result
+                            else:
+                                avg_NB2_result.accuracy += temp_result.accuracy
+                                avg_NB2_result.precision += temp_result.precision
+                                avg_NB2_result.recall += temp_result.recall
+                                avg_NB2_result.f1 += temp_result.f1
+                                avg_NB2_result.support += temp_result.support
+                            logger.info('DONE: Naive Bayes 2 (random many-to-one)')
+
                             # Test EM 2
                             logger.info('START: EM 2 (random many-to-one)')
                             estimated_component = self.estimated_random_many_one_component(
-                                testcase_data, selected_model='EM', n_folds=5, max_try=3, component_threshold=40)
+                                testcase_data, selected_model='EM',
+                                n_folds=parameter_estimate_fold,
+                                max_try=max_tries_parameter_estimate,
+                                component_threshold=component_threshold)
                             em2_model = MultinomialManyToOneEM(testcase_data, epsilon=epsilon,
                                                                component_count_list=estimated_component)
                             em2_model.train()
@@ -1534,11 +1672,37 @@ class Reuters21578Evaluation(object):
                             logger.info('DONE: EM 2 (random many-to-one)')
                             logger.info('Loop count: ' + str(em2_model.EM_loop_count))
 
-                            # TODO Test EM 3
+                            # Test NB 3
+                            logger.info('START: Naive Bayes 3 (hierarchy tree many-to-one)')
+                            estimated_component_count, estimated_component_assignment = \
+                                self.estimated_tree_many_one_component(
+                                    testcase_data, selected_model='NB',
+                                    n_folds=parameter_estimate_fold,
+                                    max_try=max_tries_parameter_estimate,
+                                    component_threshold=component_threshold)
+                            nb3_model = MultinomialManyToOneNB(testcase_data, component_count_list=estimated_component)
+                            nb3_model.train()
+                            nb3_model.test()
+                            temp_result = self.report_export(nb3_model, test_dir + nb3_sub_result_filename,
+                                                             extend_file=True, detail_return=True)
+                            if avg_NB3_result is None:
+                                avg_NB3_result = temp_result
+                            else:
+                                avg_NB3_result.accuracy += temp_result.accuracy
+                                avg_NB3_result.precision += temp_result.precision
+                                avg_NB3_result.recall += temp_result.recall
+                                avg_NB3_result.f1 += temp_result.f1
+                                avg_NB3_result.support += temp_result.support
+                            logger.info('DONE: Naive Bayes 3 (hierarchy tree many-to-one)')
+
+                            # Test EM 3
                             logger.info('START: EM 3 (hierarchy tree many-to-one)')
                             estimated_component_count, estimated_component_assignment = \
                                 self.estimated_tree_many_one_component(
-                                    testcase_data, selected_model='EM', n_folds=5, max_try=3)
+                                    testcase_data, selected_model='EM',
+                                    n_folds=parameter_estimate_fold,
+                                    max_try=max_tries_parameter_estimate,
+                                    component_threshold=component_threshold)
                             em3_model = MultinomialManyToOneEM(testcase_data, epsilon=epsilon,
                                                                component_count_list=estimated_component_count,
                                                                component_assignment_list=estimated_component_assignment)
@@ -1577,6 +1741,14 @@ class Reuters21578Evaluation(object):
                             np.divide(avg_EM1_result.f1, loop_count), \
                             np.divide(avg_EM1_result.support, loop_count)
 
+                        avg_NB2_result.accuracy, avg_NB2_result.precision, \
+                        avg_NB2_result.recall, avg_NB2_result.f1, avg_NB2_result.support = \
+                            np.divide(avg_NB2_result.accuracy, loop_count), \
+                            np.divide(avg_NB2_result.precision, loop_count), \
+                            np.divide(avg_NB2_result.recall, loop_count), \
+                            np.divide(avg_NB2_result.f1, loop_count), \
+                            np.divide(avg_NB2_result.support, loop_count)
+
                         avg_EM2_result.accuracy, avg_EM2_result.precision, \
                         avg_EM2_result.recall, avg_EM2_result.f1, avg_EM2_result.support = \
                             np.divide(avg_EM2_result.accuracy, loop_count), \
@@ -1584,6 +1756,14 @@ class Reuters21578Evaluation(object):
                             np.divide(avg_EM2_result.recall, loop_count), \
                             np.divide(avg_EM2_result.f1, loop_count), \
                             np.divide(avg_EM2_result.support, loop_count)
+
+                        avg_NB3_result.accuracy, avg_NB3_result.precision, \
+                        avg_NB3_result.recall, avg_NB3_result.f1, avg_NB3_result.support = \
+                            np.divide(avg_NB3_result.accuracy, loop_count), \
+                            np.divide(avg_NB3_result.precision, loop_count), \
+                            np.divide(avg_NB3_result.recall, loop_count), \
+                            np.divide(avg_NB3_result.f1, loop_count), \
+                            np.divide(avg_NB3_result.support, loop_count)
 
                         avg_EM3_result.accuracy, avg_EM3_result.precision, \
                         avg_EM3_result.recall, avg_EM3_result.f1, avg_EM3_result.support = \
@@ -1595,6 +1775,8 @@ class Reuters21578Evaluation(object):
 
                         # FIXME Add more algorithm here
                         self.report_avg_report(test_dir + nb1_sub_result_filename, 'AVERAGE NB1', avg_NB1_result)
+                        self.report_avg_report(test_dir + nb2_sub_result_filename, 'AVERAGE NB2', avg_NB1_result)
+                        self.report_avg_report(test_dir + nb3_sub_result_filename, 'AVERAGE NB3', avg_NB1_result)
                         self.report_avg_report(test_dir + em1_sub_result_filename, 'AVERAGE EM1', avg_EM1_result)
                         self.report_avg_report(test_dir + em2_sub_result_filename, 'AVERAGE EM2', avg_EM2_result)
                         self.report_avg_report(test_dir + em3_sub_result_filename, 'AVERAGE EM3', avg_EM3_result)
@@ -1613,8 +1795,15 @@ def main():
 
         # Test II
         evaluation = Reuters21578Evaluation()
-        evaluation.exp_group_assumption_2a(unlabeled_size=4000, n_tries=5, n_parameter_estimate_tries=5, epsilon=1e-1)
-        # evaluation.exp_group_assumption_2a(unlabeled_size=4000, n_tries=5, n_parameter_estimate_tries=5, epsilon=1e-3)
+        # (self, unlabeled_size=4000, n_tries=5,
+        # parameter_estimate_fold=5, max_tries_parameter_estimate = 5,
+        # component_threshold=50, random_seed=0, epsilon=1e-4)
+        evaluation.exp_group_assumption_2a(unlabeled_size=4000, n_tries=5,
+                                           parameter_estimate_fold=5, max_tries_parameter_estimate=3,
+                                           component_threshold=40, epsilon=1e-1)
+        # evaluation.exp_group_assumption_2a(unlabeled_size=4000, n_tries=5,
+        #                                    parameter_estimate_fold=5, max_tries_parameter_estimate=3,
+        #                                    component_threshold=40, epsilon=1e-1)
 
         logger.info('Done!')
     except BaseException:

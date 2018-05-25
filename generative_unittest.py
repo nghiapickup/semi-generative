@@ -556,6 +556,24 @@ class UtilityTest(unittest.TestCase):
         result_3 = nb.Utility.multinomial(x_3, word_prior_3)
         self.assertTrue(abs(Decimal(expected_3) - result_3) < eps, 'test_multinomial: Fail on test 3')
 
+    def test_equal_sampling(self):
+        """
+        test sum of all elements is 1
+        :return:
+        """
+        logger.info('START test_equal_sampling')
+        test_size_1 = 10
+        result_1 = nb.Utility.equal_sampling(test_size_1)
+        self.assertEqual(1, result_1.sum(), 'test_equal_sampling: Fail in test 1')
+
+        test_size_2 = 100
+        result_2 = nb.Utility.equal_sampling(test_size_2)
+        self.assertEqual(1, result_2.sum(), 'test_equal_sampling: Fail in test 2')
+
+        test_size_3 = 1234
+        result_3 = nb.Utility.equal_sampling(test_size_3)
+        self.assertEqual(1, result_3.sum(), 'test_equal_sampling: Fail in test 3')
+
 
 class AgglomerativeTreeTest(unittest.TestCase):
 
@@ -803,7 +821,7 @@ class DataTestGenerator(object):
             np.savetxt(self.test_file, np.vstack(self.test_data_list)[:], delimiter=',', fmt="%s")
 
 
-class MultinomialAllLabeledTest(unittest.TestCase):
+class MultinomialNBTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -826,7 +844,7 @@ class MultinomialAllLabeledTest(unittest.TestCase):
         The expected value is the loss data smaller than an small epsilon.
         Further more, when the data size is increased, the accuracy should have the same behaviour
         """
-        logger.info('START MultinomialAllLabeledTest')
+        logger.info('START MultinomialNBTest')
         cls.test_generator = DataTestGenerator(
             np.vstack(
                 [np.asarray([0.25, 0.25, 0.25, 0.25]),
@@ -944,7 +962,7 @@ class MultinomialEMTest(unittest.TestCase):
                             'test_argument_estimate: word probability of class ' + str(class_counter) + ' mismatch.')
 
 
-class MultinomialManyToOneTest(unittest.TestCase):
+class MultinomialManyToOneEMTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -986,7 +1004,7 @@ class MultinomialManyToOneTest(unittest.TestCase):
         ]
 
         """
-        logger.info('START MultinomialManyToOneTest')
+        logger.info('START MultinomialManyToOneEMTest')
         cls.test_generator_1 = DataTestGenerator(
             np.vstack(
                 [np.asarray([.25, .25, .25, .25]),
@@ -1008,24 +1026,6 @@ class MultinomialManyToOneTest(unittest.TestCase):
             train_size=1000,
             total_word_count=100,
             test_size_per_class=20)
-
-    def test_equal_sampling(self):
-        """
-        test sum of all elements is 1
-        :return:
-        """
-        logger.info('START test_equal_sampling')
-        test_size_1 = 10
-        result_1 = nb.MultinomialManyToOneEM.equal_sampling(test_size_1)
-        self.assertEqual(1, result_1.sum(), 'test_equal_sampling: Fail in test 1')
-
-        test_size_2 = 100
-        result_2 = nb.MultinomialManyToOneEM.equal_sampling(test_size_2)
-        self.assertEqual(1, result_2.sum(), 'test_equal_sampling: Fail in test 2')
-
-        test_size_3 = 1234
-        result_3 = nb.MultinomialManyToOneEM.equal_sampling(test_size_3)
-        self.assertEqual(1, result_3.sum(), 'test_equal_sampling: Fail in test 3')
 
     def test_argument_estimate_one_one_component(self):
         """
@@ -1134,6 +1134,170 @@ class MultinomialManyToOneTest(unittest.TestCase):
 
         # test prior pr
         epsilon = 0.01
+        for counter, (x, y) in enumerate(zip(model.prior_pr, expected_prior_pr)):
+            self.assertTrue(abs(x - y) < epsilon,
+                            'test_argument_estimate_many_one_component: prior probability of class '
+                            + str(counter) + ' mismatch.')
+        # test word pr, comparing vector word pr
+        for class_counter, (class_model, class_expected) in enumerate(zip(model.word_pr, expected_word_pr)):
+            diff = np.abs((class_model - class_expected)).sum()
+            self.assertTrue(diff < epsilon * self.test_generator_1.class_number,
+                            'test_argument_estimate_many_one_component: word probability of class '
+                            + str(class_counter) + ' mismatch.')
+
+
+class MultinomialManyToOneNBTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        """
+        This first test has the same test method with all labeled
+
+        [Test case 1]
+        Set up test data with 4 class
+        |w| = 4
+        sum(x_k) = 100
+        test instances per class = 10
+
+        P(y) = [0.2, 0.5, 0.15, 0.15] # instances per class follows this proportion
+        P(w | y) = [
+            [0.25, 0.25, 0.25, 0.25],
+            [0.3, 0.4, 0.2, 0.1],
+            [0.2, 0.2, 0.2, 0.4],
+            [0.1, 0.3, 0.3, 0.3]
+        ]
+
+        This test creates random multinomial data then using model to train this data
+        The expected value is the loss data smaller than an small epsilon.
+        Further more, when the data size is increased, the accuracy should have the same behaviour
+
+        [Test case 2]
+        Set up the second test generate and merge it with the fist one. Then we have same label,
+        with different word distributions.
+        |w2| = 4 # this must be the same with the first 1
+        sum(x_k) = 100
+        test instances per class = 10
+
+        P(y) = [0.2, 0.3, 0.3, 0.2]
+
+        P(w | y) = [
+            [0.1, 0.1, 0.2, 0.6],
+            [0.2, 0.5, 0.1, 0.2],
+            [0.1, 0.2, 0.3, 0.4],
+            [0.6, 0.1, 0.1, 0.2]
+        ]
+
+        """
+        logger.info('START MultinomialManyToOneNBTest')
+        cls.test_generator_1 = DataTestGenerator(
+            np.vstack(
+                [np.asarray([.25, .25, .25, .25]),
+                 np.asarray([.3, .4, .2, .1]),
+                 np.asarray([.2, .2, .2, .4]),
+                 np.asarray([.1, .3, .3, .3])]),
+            np.asarray([.2, .5, .15, .15]),
+            train_size=1000,
+            total_word_count=100,
+            test_size_per_class=20)
+
+        cls.test_generator_2 = DataTestGenerator(
+            np.vstack(
+                [np.asarray([.1, .1, .2, .6]),
+                 np.asarray([.2, .5, .1, .2]),
+                 np.asarray([.1, .2, .3, .4]),
+                 np.asarray([.6, .1, .1, .2])]),
+            np.asarray([.2, .3, .3, .2]),
+            train_size=1000,
+            total_word_count=100,
+            test_size_per_class=20)
+
+    def test_argument_estimate_one_one_component(self):
+        """
+        Simpple test with only one component per class.
+        The expected result should be same as MultinomialEM
+        :return:
+        """
+        logger.info('START test_argument_estimate_one_one_component')
+        self.test_generator_1.csv_export('MMM/')
+        list_file = [self.test_generator_1.map_file, self.test_generator_1.train_file, self.test_generator_1.test_file]
+        # Extract data
+        data = nb.Dataset()
+        # [ map, train, test ]
+        data.load_from_csv(list_file)
+        data_ssl = nb.SslDataset(data)
+        # [dataset, component_count_list, component_assignment_list=None]
+        model = nb.MultinomialManyToOneNB(data_ssl, np.full((self.test_generator_1.class_number, 1), 1))
+        model.train()
+        model.test()
+
+        # test prior pr
+        epsilon = 0.01
+        for counter, (x, y) in enumerate(zip(model.prior_pr, self.test_generator_1.list_prior_pr)):
+            self.assertTrue(abs(x - y) < epsilon,
+                            'test_argument_estimate_one_one_component: prior probability of class '
+                            + str(counter) + ' mismatch.')
+        # test word pr, comparing vector word pr
+        for class_counter, (class_model, class_expected) in \
+                enumerate(zip(model.word_pr, self.test_generator_1.list_word_pr_list)):
+            diff = np.abs((class_model - class_expected)).sum()
+            self.assertTrue(diff < epsilon * self.test_generator_1.class_number,
+                            'test_argument_estimate_one_one_component: word probability of class '
+                            + str(class_counter) + ' mismatch.')
+
+    def test_argument_estimate_many_one_component(self):
+        """
+        Test with equal number of components per class.
+        The estimated value should not be larger than expected value more than epsilon
+        :return:
+        """
+        logger.info('test_argument_estimate_many_one_component')
+        self.test_generator_1.csv_export('MMM/')
+        list_file = [self.test_generator_1.map_file, self.test_generator_1.train_file, self.test_generator_1.test_file]
+
+        self.test_generator_2.csv_export('MMM/', extend_mode=True)
+
+        # Extract data
+        data = nb.Dataset()
+        # [ map, train, test ]
+        data.load_from_csv(list_file)
+        data_ssl = nb.SslDataset(data, unlabeled_size=.4)
+        # [dataset, component_count_list, component_assignment_list=None]
+        # 2 component per class
+        model = nb.MultinomialManyToOneNB(data_ssl, np.full((self.test_generator_1.class_number, 1), 2))
+        model.train()
+        model.test()
+
+        # prior_pr or word_pr now are a list with components, each component has corresponding with
+        # its data count and total data in all components.
+        # Combine 2 generator for expected value
+        expected_prior_pr = []
+        # @@ OMG this has cost me a lot of time @@
+        expected_word_pr = np.empty((self.test_generator_1.class_number * 2, self.test_generator_1.feature_number))
+        train_size_1 = self.test_generator_1.train_size
+        train_size_2 = self.test_generator_2.train_size
+        total_train_data = train_size_1 + train_size_2
+        for counter, (x, y) in enumerate(zip(self.test_generator_1.list_prior_pr, self.test_generator_2.list_prior_pr)):
+            # we don't know which component of generator 1 or 2 first.
+            # So we find the most match with model prior, same with word_pr
+            sample_prior = model.prior_pr[2*counter]
+            if (abs(train_size_1 * x / float(total_train_data) - sample_prior)
+                    < abs(train_size_2 * y / float(total_train_data) - sample_prior)):
+                expected_prior_pr.extend([train_size_1 * x / float(total_train_data),
+                                          train_size_2 * y / float(total_train_data)])
+            else:
+                expected_prior_pr.extend([train_size_2 * y / float(total_train_data),
+                                          train_size_1 * x / float(total_train_data)])
+            # just in case we have same prior_pr
+            if (np.abs(model.word_pr[2 * counter] - self.test_generator_1.list_word_pr_list[counter]).sum() <
+                np.abs(model.word_pr[2*counter + 1] - self.test_generator_1.list_word_pr_list[counter]).sum()):
+                expected_word_pr[2 * counter] = self.test_generator_1.list_word_pr_list[counter]
+                expected_word_pr[2 * counter + 1] = self.test_generator_2.list_word_pr_list[counter]
+            else:
+                expected_word_pr[2 * counter] = self.test_generator_2.list_word_pr_list[counter]
+                expected_word_pr[2 * counter + 1] = self.test_generator_1.list_word_pr_list[counter]
+
+        # test prior pr
+        epsilon = 0.1
         for counter, (x, y) in enumerate(zip(model.prior_pr, expected_prior_pr)):
             self.assertTrue(abs(x - y) < epsilon,
                             'test_argument_estimate_many_one_component: prior probability of class '
@@ -1259,10 +1423,10 @@ class Reuters21578EvaluationTest(unittest.TestCase):
                 np.vstack(
                     [np.asarray([0.25, 0.25, 0.25, 0.25]),
                      np.asarray([0.3, 0.4, 0.2, 0.1])]),
-                np.asarray([0.3, 0.7]),
-                train_size=1000,
+                np.asarray([0.4, 0.6]),
+                train_size=100,
                 total_word_count=100,
-                test_size_per_class=10)
+                test_size_per_class=20)
             # data generator
             for sub_folder in self.sub_folder_2a:
                 for test_count in range(2):
@@ -1280,8 +1444,10 @@ class Reuters21578EvaluationTest(unittest.TestCase):
             # test model
             evaluation = nb.Reuters21578Evaluation()
             evaluation.default_dir = 'MMM/test_data/'
-            evaluation.approximate_labeled_sizes_2a = [100, 200]
-            evaluation.exp_group_assumption_2a(unlabeled_size=400, n_tries=3, n_parameter_estimate_tries=2)
+            evaluation.approximate_labeled_sizes_2a = [10, 20]
+            evaluation.exp_group_assumption_2a(unlabeled_size=40, n_tries=3,
+                                               parameter_estimate_fold=3, max_tries_parameter_estimate=3,
+                                               component_threshold=5, epsilon=1e-1)
         except BaseException:
             exception_raise = True
             raise
@@ -1302,8 +1468,8 @@ def suite(test_classes):
 
 def main():
     # test list
-    mmm_test = [UtilityTest, MultinomialAllLabeledTest, MultinomialEMTest,
-                AgglomerativeTreeTest, MultinomialManyToOneTest]
+    mmm_test = [UtilityTest, MultinomialNBTest, MultinomialEMTest,
+                AgglomerativeTreeTest, MultinomialManyToOneEMTest, MultinomialManyToOneNBTest]
 
     data_preprocessing_test = [Preprocessing20NewsTest, origin_20news_splitter_test, origin_reuters21578_splitter_test]
 
