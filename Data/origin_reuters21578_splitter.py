@@ -398,8 +398,8 @@ class data_preprocessing(object):
                 test_label[counter] = 0 if test_label[counter] == binary_test_class else 1
 
         # Merge instance and label
-        train = np.insert(train_data, train_data.shape[1], train_label, axis=1)
-        test = np.insert(test_data, test_data.shape[1], test_label, axis=1)
+        train = np.insert(train_data, train_data.shape[1], train_label.T, axis=1)
+        test = np.insert(test_data, test_data.shape[1], test_label.T, axis=1)
         if binary_test_class > -1:
             map = np.arange(2)
         else:
@@ -423,51 +423,38 @@ def main():
     logger.info('START REUTERS21578 DATA PREPROCESSING')
     logger.info('START preprocessing1: test_size=0.3')
     preprocessing1 = data_preprocessing(X, y, test_size=0.3,
-                                        root_folder='2a_reuters_test_scale_3')
+                                        root_folder='2a_reuters_test_scale_3/')
     preprocessing1.mutual_information_extract()
 
     #
     # Test binary classification transform
     #
     # grain
-    logger.info('preprocessing1 selected_word_number=400, scale_length=10000, binary_test_class=24, subfolder=400')
-    preprocessing1.data_mi_selection_export(selected_word_number=400, binary_test_class=24, scale_length=10000,
-                                           extract_to_file=True, subfolder='grain400')
-    logger.info('preprocessing1 selected_word_number=600, scale_length=10000, binary_test_class=24, subfolder=600')
-    preprocessing1.data_mi_selection_export(selected_word_number=600, binary_test_class=24, scale_length=10000,
-                                           extract_to_file=True, subfolder='grain600')
+    word_list = [400, 600, 800]
+    for i in word_list:
+        logger.info('preprocessing1 scale_length=10000, binary_test_class=24, selected_word_number=' + str(i))
+        preprocessing1.data_mi_selection_export(selected_word_number=i, binary_test_class=24, scale_length=10000,
+                                               extract_to_file=True, subfolder='grain'+str(i))
 
-    # crude
-    logger.info('preprocessing1 selected_word_number=400, scale_length=10000, binary_test_class=14, subfolder=400')
-    preprocessing1.data_mi_selection_export(selected_word_number=400, binary_test_class=14, scale_length=10000,
-                                            extract_to_file=True, subfolder='crude400')
-    logger.info('preprocessing1 selected_word_number=600, scale_length=10000, binary_test_class=24, subfolder=600')
-    preprocessing1.data_mi_selection_export(selected_word_number=600, binary_test_class=14, scale_length=10000,
-                                            extract_to_file=True, subfolder='crude600')
+        # crude
+        logger.info('preprocessing1 scale_length=10000, binary_test_class=14, selected_word_number=' + str(i))
+        preprocessing1.data_mi_selection_export(selected_word_number=i, binary_test_class=14, scale_length=10000,
+                                                extract_to_file=True, subfolder='crude'+str(i))
 
-    # money-fx
-    logger.info('preprocessing1 selected_word_number=400, scale_length=10000, binary_test_class=44, subfolder=400')
-    preprocessing1.data_mi_selection_export(selected_word_number=400, binary_test_class=44, scale_length=10000,
-                                            extract_to_file=True, subfolder='money-fx400')
-    logger.info('preprocessing1 selected_word_number=600, scale_length=10000, binary_test_class=24, subfolder=600')
-    preprocessing1.data_mi_selection_export(selected_word_number=600, binary_test_class=44, scale_length=10000,
-                                            extract_to_file=True, subfolder='money-fx600')
+        # money-fx
+        logger.info('preprocessing1 scale_length=10000, binary_test_class=44, selected_word_number=' + str(i))
+        preprocessing1.data_mi_selection_export(selected_word_number=i, binary_test_class=44, scale_length=10000,
+                                                extract_to_file=True, subfolder='money-fx'+str(i))
 
-    # acq
-    logger.info('preprocessing1 selected_word_number=400, scale_length=10000, binary_test_class=0, subfolder=400')
-    preprocessing1.data_mi_selection_export(selected_word_number=400, binary_test_class=0, scale_length=10000,
-                                            extract_to_file=True, subfolder='acq400')
-    logger.info('preprocessing1 selected_word_number=600, scale_length=10000, binary_test_class=24, subfolder=600')
-    preprocessing1.data_mi_selection_export(selected_word_number=600, binary_test_class=0, scale_length=10000,
-                                            extract_to_file=True, subfolder='acq600')
+        # acq
+        logger.info('preprocessing1 scale_length=10000, binary_test_class=0, selected_word_number=' + str(i))
+        preprocessing1.data_mi_selection_export(selected_word_number=i, binary_test_class=0, scale_length=10000,
+                                                extract_to_file=True, subfolder='acq'+str(i))
 
-    # earn
-    logger.info('preprocessing1 selected_word_number=400, scale_length=10000, binary_test_class=17, subfolder=400')
-    preprocessing1.data_mi_selection_export(selected_word_number=400, binary_test_class=17, scale_length=10000,
-                                            extract_to_file=True, subfolder='earn400')
-    logger.info('preprocessing1 selected_word_number=600, scale_length=10000, binary_test_class=24, subfolder=600')
-    preprocessing1.data_mi_selection_export(selected_word_number=600, binary_test_class=17, scale_length=10000,
-                                            extract_to_file=True, subfolder='earn600')
+        # earn
+        logger.info('preprocessing1 scale_length=10000, binary_test_class=17, selected_word_number=' + str(i))
+        preprocessing1.data_mi_selection_export(selected_word_number=i, binary_test_class=17, scale_length=10000,
+                                                extract_to_file=True, subfolder='earn'+str(i))
 
     logger.info('Done !')
 if __name__ == "__main__":

@@ -643,11 +643,15 @@ class MultinomialManyToOneEM(object):
         log_mle_old = Decimal(0)
         for j in range(m):
             for i in range(l):
-                log_mle_new += delta[i][j] * Decimal(Decimal(self.prior_pr[j]) *
-                                                     Utility.multinomial(self.data.train_xl[i], self.word_pr[j])).ln()
+                if float(delta[i][j]) != 0:
+                    log_mle_new += delta[i][j] * \
+                                   Decimal(Decimal(self.prior_pr[j]) *
+                                           Utility.multinomial(self.data.train_xl[i], self.word_pr[j])).ln()
             for i in range(u):
-                log_mle_new += delta[l+i][j] * Decimal(Decimal(self.prior_pr[j]) *
-                                                       Utility.multinomial(self.data.train_xu[i], self.word_pr[j])).ln()
+                if float(delta[l+i][j]) != 0:
+                    log_mle_new += delta[l+i][j] * \
+                                   Decimal(Decimal(self.prior_pr[j]) *
+                                           Utility.multinomial(self.data.train_xu[i], self.word_pr[j])).ln()
 
         # data D = (xl, yl) union (xu)
         # the loop continues from theta_1
@@ -715,11 +719,15 @@ class MultinomialManyToOneEM(object):
             log_mle_new = Decimal(0)
             for j in range(m):
                 for i in range(l):
-                    log_mle_new += delta[i][j] * Decimal(Decimal(self.prior_pr[j]) *
-                                                         Utility.multinomial(self.data.train_xl[i], self.word_pr[j])).ln()
+                    if float(delta[i][j]) != 0:
+                        log_mle_new += delta[i][j] * \
+                                       Decimal(Decimal(self.prior_pr[j]) *
+                                               Utility.multinomial(self.data.train_xl[i], self.word_pr[j])).ln()
                 for i in range(u):
-                    log_mle_new += delta[l+i][j] * Decimal(Decimal(self.prior_pr[j]) *
-                                                           Utility.multinomial(self.data.train_xu[i], self.word_pr[j])).ln()
+                    if float(delta[l+i][j] != 0):
+                        log_mle_new += delta[l+i][j] * \
+                                   Decimal(Decimal(self.prior_pr[j]) *
+                                           Utility.multinomial(self.data.train_xu[i], self.word_pr[j])).ln()
 
         self.EM_loop_count = loop_count
 
@@ -759,7 +767,7 @@ splitter = namedlist('splitter', 'cut_id, cut_value, order', default=0)
 class AgglomerativeTree(object):
     __doc__ = 'Agglomerative Hierarchy Tree'
 
-    def __init__(self, dataset, metric='bin_bin_distance'):
+    def __init__(self, dataset, metric='match_distance'):
         try:
             if type(dataset) is not SslDataset:
                 raise SelfException.DataTypeConstraint('Dataset type is not SslDataset.')
@@ -1261,7 +1269,7 @@ class Reuters21578Evaluation(object):
 
         # exp_feature_selection_2a
         self.sub_folder_list_2a = '2a_reuters_test_scale_3'.split()
-        self.approximate_labeled_sizes_2a = np.array([500, 1000])
+        self.approximate_labeled_sizes_2a = np.array([100, 200, 500, 1000])
 
     # Note for the returned agglomerative tree
     # 1. there are 2 arguments for many_to_one :
@@ -1330,7 +1338,7 @@ class Reuters21578Evaluation(object):
             f.writelines('\n')
 
     def estimated_random_many_one_component(self, dataset, selected_model='EM',
-                                            n_folds=5, max_try = 5, component_threshold=50):
+                                            n_folds=5, max_try=5, component_threshold=50):
         """
         Estimated number of component per class using random sampling
         Currently this search only uses for Reuters binary classification with default class lable '0'.
@@ -1350,7 +1358,7 @@ class Reuters21578Evaluation(object):
             skf = model_selection.StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=0)
             max_f1 = -1
             best_component = 1
-            for i in range(1, component_threshold):
+            for i in range(2, component_threshold):
                 selected_parameter[1] = i
                 avg_f1 = 0
                 try_count = 0
@@ -1369,8 +1377,8 @@ class Reuters21578Evaluation(object):
                         model = MultinomialManyToOneEM(testcase_data,
                                                        component_count_list=selected_parameter, epsilon=1e-1)
                     elif selected_model == 'NB':
-                        # FIXME Change Many-to-one NB here
-                        model = MultinomialNB(testcase_data)
+                        model = MultinomialManyToOneNB(testcase_data,
+                                                       component_count_list=selected_parameter)
                     else:
                         raise SelfException.UnSupportMethod('Only NB or EM option is accepted')
                     model.train()
@@ -1444,10 +1452,12 @@ class Reuters21578Evaluation(object):
                     split_id_list.append(split.cut_id)
                     # Slice component_list by split_id_list
                     component_assignment_label1_sliced = []
-                    slice_range = np.insert(sorted(split_id_list), len(split_id_list), len(split_id_list)-1)
-                    u = -1
+                    slice_range = np.insert(sorted(split_id_list), len(split_id_list),
+                                            len(component_assignment_label1)-1)
+                    u = 0
                     for v in slice_range:
-                        component_assignment_label1_sliced.append(component_assignment_label1[u+1:v+1])
+                        component_assignment_label1_sliced.append(component_assignment_label1[u:v+1])
+                        u = v + 1
 
                     selected_component_count = np.asarray([1, len(component_assignment_label1_sliced)])
                     selected_component_assignment = [[component_assignment_label0], component_assignment_label1_sliced]
@@ -1458,8 +1468,9 @@ class Reuters21578Evaluation(object):
                                                        component_assignment_list=selected_component_assignment,
                                                        epsilon=1e-1)
                     elif selected_model == 'NB':
-                        # FIXME Change Many-to-one NB here
-                        model = MultinomialNB(testcase_data)
+                        model = MultinomialManyToOneNB(testcase_data,
+                                                       component_count_list=selected_component_count,
+                                                       component_assignment_list=selected_component_assignment)
                     else:
                         raise SelfException.UnSupportMethod('Only NB or EM option is accepted')
                     model.train()
@@ -1473,7 +1484,7 @@ class Reuters21578Evaluation(object):
 
             # based on what condition comes first: run through all fold or try count passes max_try
             avg_split_value = avg_split_value / min(n_folds, max_try)
-            logger.info('Average Split Value: ' + str(avg_split_value/min(n_folds, max_try)))
+            logger.info('Average Split Value: ' + str(avg_split_value))
 
             # After find out avg_split_value, build tree on all training set
             # and find the cut with smallest absolute distance witht avg_split_value
@@ -1484,17 +1495,23 @@ class Reuters21578Evaluation(object):
             component_assignment_label1 = hierarchy_scheme[1].element_id_list
             # get the splitters and find the closest split with avg_split_value
             split_id_list = []
+            # finding the upper bound
             for split in sorted(hierarchy_scheme[1].splitter_list, key=lambda x: x.order, reverse=True):
                 split_id_list.append(split.cut_id)
                 if split.cut_value > avg_split_value: break
+            # finding the lower bound
+            # for split in sorted(hierarchy_scheme[1].splitter_list, key=lambda x: x.order, reverse=True):
+            #     if split.cut_value > avg_split_value: break
+            #     split_id_list.append(split.cut_id)
 
             # split data by split_id_list
             component_assignment_label1_sliced = []
-            slice_range = np.insert(sorted(split_id_list), len(split_id_list), len(split_id_list) - 1)
-            u = -1
+            slice_range = np.insert(sorted(split_id_list), len(split_id_list),
+                                    len(component_assignment_label1) - 1)
+            u = 0
             for v in slice_range:
-                component_assignment_label1_sliced.append(component_assignment_label1[u+1:v+1])
-
+                component_assignment_label1_sliced.append(component_assignment_label1[u:v + 1])
+                u = v + 1
             # assign parameter
             selected_component_count = np.asarray([1, len(component_assignment_label1)])
             selected_component_assignment = [[component_assignment_label0], component_assignment_label1_sliced]
@@ -1507,7 +1524,7 @@ class Reuters21578Evaluation(object):
     # II. Data grouping assumption
     def exp_group_assumption_2a(self, unlabeled_size=4000, n_tries=5, parameter_estimate_fold=5,
                                 max_tries_parameter_estimate = 5, component_threshold=50,
-                                random_seed=0, epsilon=1e-4):
+                                distance_metric='match_distance', random_seed=0, epsilon=1e-4):
         """
         Experiment proceduce:
         1. Test with fix large amount of unlabeled data, with small amount of labeled data
@@ -1532,6 +1549,7 @@ class Reuters21578Evaluation(object):
                                             number of fold use for parameter estimate(group speading) at each try
         :param max_tries_parameter_estimate: int, default 5, maximum number of tries run when estimate parameter
         :param component_threshold: maximum number of groups search when estimate papameter
+        :param distance_metric: type of distance method using for building tree
         :param random_seed: int, default=0, seed of random generator
         :param epsilon: default 1e-4, MLE convergence threshold for EM based algorithm
         :return:
@@ -1679,8 +1697,11 @@ class Reuters21578Evaluation(object):
                                     testcase_data, selected_model='NB',
                                     n_folds=parameter_estimate_fold,
                                     max_try=max_tries_parameter_estimate,
-                                    component_threshold=component_threshold)
-                            nb3_model = MultinomialManyToOneNB(testcase_data, component_count_list=estimated_component)
+                                    component_threshold=component_threshold,
+                                    distance_metric=distance_metric)
+                            nb3_model = MultinomialManyToOneNB(testcase_data,
+                                                               component_count_list=estimated_component_count,
+                                                               component_assignment_list=estimated_component_assignment)
                             nb3_model.train()
                             nb3_model.test()
                             temp_result = self.report_export(nb3_model, test_dir + nb3_sub_result_filename,
@@ -1702,7 +1723,8 @@ class Reuters21578Evaluation(object):
                                     testcase_data, selected_model='EM',
                                     n_folds=parameter_estimate_fold,
                                     max_try=max_tries_parameter_estimate,
-                                    component_threshold=component_threshold)
+                                    component_threshold=component_threshold,
+                                    distance_metric=distance_metric)
                             em3_model = MultinomialManyToOneEM(testcase_data, epsilon=epsilon,
                                                                component_count_list=estimated_component_count,
                                                                component_assignment_list=estimated_component_assignment)
@@ -1789,7 +1811,6 @@ def main():
     try:
         # Test I
         # evaluation = NewsEvaluation()
-        # News dataset
         # evaluation.exp_feature_selection_1a(epsilon=1e-3)
         # evaluation.exp_cooperate_unlabeled_1b(epsilon=1e-3)
 
@@ -1798,13 +1819,9 @@ def main():
         # (self, unlabeled_size=4000, n_tries=5,
         # parameter_estimate_fold=5, max_tries_parameter_estimate = 5,
         # component_threshold=50, random_seed=0, epsilon=1e-4)
-        evaluation.exp_group_assumption_2a(unlabeled_size=4000, n_tries=5,
-                                           parameter_estimate_fold=5, max_tries_parameter_estimate=3,
-                                           component_threshold=40, epsilon=1e-1)
-        # evaluation.exp_group_assumption_2a(unlabeled_size=4000, n_tries=5,
-        #                                    parameter_estimate_fold=5, max_tries_parameter_estimate=3,
-        #                                    component_threshold=40, epsilon=1e-1)
-
+        evaluation.exp_group_assumption_2a(unlabeled_size=5000, n_tries=5,
+                                           parameter_estimate_fold=5, max_tries_parameter_estimate=5,
+                                           distance_metric='match_distance', component_threshold=40,epsilon=1e-1)
         logger.info('Done!')
     except BaseException:
         logger.exception('main() BaseException')
