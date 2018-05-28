@@ -1442,12 +1442,27 @@ class Reuters21578EvaluationTest(unittest.TestCase):
                     test_generator.csv_export('MMM/', export_name_list=filename_list)
 
             # test model
-            evaluation = nb.Reuters21578Evaluation()
+            # test 1
+            # __init__(self, component_search_threshold=50, component_estimate_nfold=5, max_tries_parameter_estimate=5,
+            #          distance_metric='match_distance', component_search_epsilon=1e-4,
+            #          component_estimate_f1_avg='binary')
+            evaluation = nb.Reuters21578Evaluation(component_search_threshold=5, component_estimate_nfold=3,
+                                                   max_tries_parameter_estimate=3, component_search_epsilon=1e-1,
+                                                   component_estimate_f1_avg='binary')
             evaluation.default_dir = 'MMM/test_data/'
             evaluation.approximate_labeled_sizes_2a = [10, 20]
-            evaluation.exp_group_assumption_2a(unlabeled_size=40, n_tries=3,
-                                               parameter_estimate_fold=3, max_tries_parameter_estimate=3,
-                                               component_threshold=5, epsilon=1e-1)
+
+            # exp_group_assumption_2a(self, unlabeled_size=5000, n_tries=5, random_seed=0,
+            #                         epsilon=1e-4, tree_search='cut_value')
+            evaluation.exp_group_assumption_2a(unlabeled_size=40, n_tries=3, epsilon=1e-1, tree_search='cut_value')
+
+            # test 2
+            evaluation = nb.Reuters21578Evaluation(component_search_threshold=5, component_estimate_nfold=3,
+                                                   max_tries_parameter_estimate=3, component_search_epsilon=1e-1,
+                                                   component_estimate_f1_avg='macro')
+            evaluation.default_dir = 'MMM/test_data/'
+            evaluation.approximate_labeled_sizes_2a = [10, 20]
+            evaluation.exp_group_assumption_2a(unlabeled_size=40, n_tries=3, epsilon=1e-1, tree_search='component_count')
         except BaseException:
             exception_raise = True
             raise
@@ -1475,7 +1490,7 @@ def main():
 
     evaluation_test = [NewsEvaluationTest, Reuters21578EvaluationTest]
 
-    temp_test = [Reuters21578EvaluationTest]
+    temp_test = []
 
     # list of all desired tests
     # require_test = 'mmm_test data_preprocessing_test evaluation_test'

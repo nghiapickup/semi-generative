@@ -9,7 +9,8 @@ semi-supervised
 
 ### /MMM
 supervised
-- Multinomial mixture model (MMM) for text, derivative solution
+- Multinomial Naive Bayes (MMM) for text, derivative solution
+- Multinomial Naive Bayes (MMM) for text, derivative solution, many-to-one assumption
 
 semi-supervised
 - MMM for text, EM algorithm

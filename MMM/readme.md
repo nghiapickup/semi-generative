@@ -35,10 +35,32 @@ than reading large features vector file.
 ### < Dataset >
 Generate basic data input format from list file
 
-- __init(*args)__ Init base class or from orther dataset read from args
-- __load_from_csv(file_name)__ load data from csv files specified in file_name (train, test, map)
+### < SslDataset >
+Data frame for Semi-supervised Learning
 
-    
-    Example file_name
-    data-test/map.csv data-test/train.csv data-test/test.csv
-    
+### < Dataset >
+Generate basic data input format from list file
+
+### < Utility >
+Tools and general calculation methods
+
+### < MultinomialNB >
+Multinomial Naive Bayes model, derivative solution
+
+### < MultinomialEM >
+Multinomial Naive Bayes using unlabeled data, EM algorithm
+
+### < MultinomialManyToOneNB >
+Multinomial Naive Bayes model, derivative solution using many-to-one assumption
+
+### < MultinomialManyToOneEM >
+Multinomial Naive Bayes using unlabeled data, EM algorithm using many-to-one assumption
+
+### < AgglomerativeTree >
+Construct agglomarative tree on labeled data
+
+### < NewsEvaluation >
+Evaluation MultinomialNB and MultinomialNB using 20Newsgroups dataset
+
+### < Reuters21578Evaluation >
+Evaluation MultinomialManyToOneNB and MultinomialManyToOneEM using Reuters21578 dataset

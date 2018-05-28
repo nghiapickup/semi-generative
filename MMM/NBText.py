@@ -1263,7 +1263,19 @@ class Reuters21578Evaluation(object):
               'vocabulary size 28438'
     result_return_form = namedlist('result_return_form', 'accuracy, precision, recall, f1, support')
 
-    def __init__(self):
+    def __init__(self, component_search_threshold=50, component_estimate_nfold=5, max_tries_parameter_estimate=5,
+                 distance_metric='match_distance', component_search_epsilon=1e-4, component_estimate_f1_avg='binary'):
+        """
+        :param component_search_threshold: maximum number of groups search when estimate papameter
+        :param component_estimate_nfold: positive int, default=5,
+                                            number of fold use for parameter estimate(group speading) at each try
+
+        :param max_tries_parameter_estimate: int, default 5, maximum number of tries run when estimate parameter
+        :param distance_metric: type of distance method using for building tree
+        :param component_search_epsilon: default 1e-4, MLE convergence EM algorithm threshold for component search
+        :param component_estimate_f1_avg: default 'binary', f1 average mode,
+                                          'binary': only label 1, 'macro': unweighted mean
+        """
         self.default_dir = 'data/'
         self.map_filename, self.train_filename, self.test_filename = 'news.map.csv', 'news.train.csv', 'news.test.csv'
 
@@ -1271,14 +1283,14 @@ class Reuters21578Evaluation(object):
         self.sub_folder_list_2a = '2a_reuters_test_scale_3'.split()
         self.approximate_labeled_sizes_2a = np.array([100, 200, 500, 1000])
 
-    # Note for the returned agglomerative tree
-    # 1. there are 2 arguments for many_to_one :
-    # First is the list count of component per each class
-    # Second is the list assignment labeled data for each component
-    #   So this list is a list of n sub-list with n equals to number of class
-    #   each sub-list n_i is m_i sub-sub-list, with m_i is the number of components of class i
-    #   each |m_i| sub-sub-sub-list is including labeled data ids of each component in class i
-    # NOTE: The order of class must follow class id. That means class 0 will be before class 1, ...
+        # component estimate parameter
+        self.component_search_threshold = component_search_threshold
+        self.component_estimate_nfold = component_estimate_nfold
+        self.max_tries_parameter_estimate = max_tries_parameter_estimate
+        self.distance_metric = distance_metric
+        self.component_search_epsilon = component_search_epsilon
+        # TODO check average mode only macro or binary
+        self.component_estimate_f1_avg = component_estimate_f1_avg
 
     def report_export(self, model, file_name, extend_file=False, detail_return=False):
         """
@@ -1337,28 +1349,25 @@ class Reuters21578Evaluation(object):
             f.writelines('\n support ' + str(result.support))
             f.writelines('\n')
 
-    def estimated_random_many_one_component(self, dataset, selected_model='EM',
-                                            n_folds=5, max_try=5, component_threshold=50):
+    def estimated_random_many_one_component(self, dataset, selected_model='EM', max_try=5):
         """
         Estimated number of component per class using random sampling
         Currently this search only uses for Reuters binary classification with default class lable '0'.
         Then it only searhc component for the second label '1'.
         :param dataset:
         :param selected_model: 'NB' for Naive Bayes or 'EM' for EM algorithm
-        :param n_folds: number of folds split
-        :param max_try: default =1, maximum try for each cross-validation (Not recommend, this forces the calc times)
-        :param component_threshold: max component search number
+        :param max_try: default =1, maximum try for each cross-validation (Not recommended, this forces the calc times)
         :return:
         """
         logger.info('START estimated_random_many_one_component')
         if dataset.class_number > 2:
             raise SelfException.UnSupportMethod('Only supports binary classification')
-        selected_parameter = np.asarray([1, 1])
         try:
-            skf = model_selection.StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=0)
+            selected_parameter = np.asarray([1, 1])
+            skf = model_selection.StratifiedKFold(n_splits=self.component_estimate_nfold, shuffle=True, random_state=0)
             max_f1 = -1
             best_component = 1
-            for i in range(2, component_threshold):
+            for i in range(2, self.component_search_threshold):
                 selected_parameter[1] = i
                 avg_f1 = 0
                 try_count = 0
@@ -1375,7 +1384,8 @@ class Reuters21578Evaluation(object):
                     testcase_data.test_number = len(test_index)
                     if selected_model == 'EM':
                         model = MultinomialManyToOneEM(testcase_data,
-                                                       component_count_list=selected_parameter, epsilon=1e-1)
+                                                       component_count_list=selected_parameter,
+                                                       epsilon=self.component_search_epsilon)
                     elif selected_model == 'NB':
                         model = MultinomialManyToOneNB(testcase_data,
                                                        component_count_list=selected_parameter)
@@ -1383,41 +1393,41 @@ class Reuters21578Evaluation(object):
                         raise SelfException.UnSupportMethod('Only NB or EM option is accepted')
                     model.train()
                     model.test()
-                    avg_f1 += metrics.f1_score(model.data.test_y, model.predicted_label)
-                if  avg_f1 > max_f1:
+                    avg_f1 += metrics.f1_score(model.data.test_y, model.predicted_label,
+                                               average=self.component_estimate_f1_avg)
+                if avg_f1 > max_f1:
                     max_f1 = avg_f1
                     best_component = i
             selected_parameter[1] = best_component
-            logger.info('Best component number: ' + str(best_component))
+            logger.info('Best random selected component number: ' + str(best_component))
+            return selected_parameter
         except BaseException:
             logger.exception('estimated_random_many_one_component BaseException')
             raise
-        return selected_parameter
 
-    def estimated_tree_many_one_component(self, dataset, selected_model='EM', n_folds=5, max_try = 5,
-                                          component_threshold=50, distance_metric='match_distance'):
+    def estimated_tree_cut_value_many_one_component(self, dataset, selected_model='EM', max_try=5):
         """
-        Estimated number of component per class using aglomarative hierarchy tree sampling
+        Estimated number of component per class using aglomarative hierarchy tree sampling cut value.
+        For each fold, function will finds the best cut value in range of component_threshold
+
         Currently this search only uses for Reuters binary classification with default class label '0'.
         Then it only search component for the second label '1'.
+
 
         The CV procedure in search to find the best cut_value with highest f1_score on all folds
         :param dataset:
         :param selected_model: 'NB' for Naive Bayes or 'EM' for EM algorithm
-        :param n_folds: number of folds split
-        :param max_try: default =1, maximum try for each cross-validation (Not recommend, this forces the calc times)
-        :param component_threshold: max component search number
-        :param distance_metric: type of distance method using for building tree
+        :param max_try: default =1, maximum try for each cross-validation (Not recommended, this forces the calc times)
         :return:
         """
         # TODO Estimate with no split (only 1 group)  case
-        logger.info('START estimated_tree_many_one_component')
+        logger.info('START estimated_tree_cut_value_many_one_component')
         if dataset.class_number > 2:
             raise SelfException.UnSupportMethod('Only supports binary classification')
         try:
             try_count = 0
             avg_split_value = 0
-            skf = model_selection.StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=0)
+            skf = model_selection.StratifiedKFold(n_splits=self.component_estimate_nfold, shuffle=True, random_state=0)
             for train_index, test_index in skf.split(dataset.train_xl, dataset.train_yl):
                 try_count += 1
                 if try_count > max_try: break
@@ -1432,7 +1442,7 @@ class Reuters21578Evaluation(object):
 
                 # build hierarchy tree
                 # NOTICE that this only for specific case of binary class when we only assert tree on label '1'
-                tree = AgglomerativeTree(testcase_data, metric=distance_metric)
+                tree = AgglomerativeTree(testcase_data, metric=self.distance_metric)
                 hierarchy_scheme = tree.build_hierarchy_scheme_binary_class()
                 # get list id data for each class
                 component_assignment_label0 = hierarchy_scheme[0].element_id_list
@@ -1447,7 +1457,7 @@ class Reuters21578Evaluation(object):
                 max_f1_score = 0
                 best_split_value = 0
                 for split in splitter_scheme_label1:
-                    if extract_count >= component_threshold: break
+                    if extract_count >= self.component_search_threshold: break
                     extract_count += 1
                     split_id_list.append(split.cut_id)
                     # Slice component_list by split_id_list
@@ -1466,7 +1476,7 @@ class Reuters21578Evaluation(object):
                         model = MultinomialManyToOneEM(testcase_data,
                                                        component_count_list=selected_component_count,
                                                        component_assignment_list=selected_component_assignment,
-                                                       epsilon=1e-1)
+                                                       epsilon=self.component_search_epsilon)
                     elif selected_model == 'NB':
                         model = MultinomialManyToOneNB(testcase_data,
                                                        component_count_list=selected_component_count,
@@ -1475,7 +1485,8 @@ class Reuters21578Evaluation(object):
                         raise SelfException.UnSupportMethod('Only NB or EM option is accepted')
                     model.train()
                     model.test()
-                    temp_f1 = metrics.f1_score(model.data.test_y, model.predicted_label)
+                    temp_f1 = metrics.f1_score(model.data.test_y, model.predicted_label,
+                                               average=self.component_estimate_f1_avg)
                     if temp_f1 > max_f1_score:
                         max_f1_score = temp_f1
                         best_split_value = split.cut_value
@@ -1483,12 +1494,12 @@ class Reuters21578Evaluation(object):
                 avg_split_value += best_split_value
 
             # based on what condition comes first: run through all fold or try count passes max_try
-            avg_split_value = avg_split_value / min(n_folds, max_try)
+            avg_split_value = avg_split_value / min(self.component_estimate_nfold, max_try)
             logger.info('Average Split Value: ' + str(avg_split_value))
 
             # After find out avg_split_value, build tree on all training set
             # and find the cut with smallest absolute distance witht avg_split_value
-            tree = AgglomerativeTree(dataset, metric=distance_metric)
+            tree = AgglomerativeTree(dataset, metric=self.distance_metric)
             hierarchy_scheme = tree.build_hierarchy_scheme_binary_class()
             # get list id data for each class
             component_assignment_label0 = hierarchy_scheme[0].element_id_list
@@ -1499,10 +1510,6 @@ class Reuters21578Evaluation(object):
             for split in sorted(hierarchy_scheme[1].splitter_list, key=lambda x: x.order, reverse=True):
                 split_id_list.append(split.cut_id)
                 if split.cut_value > avg_split_value: break
-            # finding the lower bound
-            # for split in sorted(hierarchy_scheme[1].splitter_list, key=lambda x: x.order, reverse=True):
-            #     if split.cut_value > avg_split_value: break
-            #     split_id_list.append(split.cut_id)
 
             # split data by split_id_list
             component_assignment_label1_sliced = []
@@ -1518,13 +1525,136 @@ class Reuters21578Evaluation(object):
             logger.info('Number of component: ' + str(len(component_assignment_label1_sliced)))
             return selected_component_count, selected_component_assignment
         except BaseException:
-            logger.exception('estimated_random_many_one_component BaseException')
+            logger.exception('estimated_tree_cut_value_many_one_component BaseException')
+            raise
+
+    def estimated_tree_component_count_many_one_component(self, dataset, selected_model='EM', max_try=5):
+        """
+        Estimated number of component per class using aglomarative hierarchy tree sampling cut value.
+        For each fold, function will finds the best component number has highest f1 in range of component_threshold
+
+        Currently this search only uses for Reuters binary classification with default class label '0'.
+        Then it only search component for the second label '1'.
+
+
+        The CV procedure in search to find the best cut_value with highest f1_score on all folds
+        :param dataset:
+        :param selected_model: 'NB' for Naive Bayes or 'EM' for EM algorithm
+        :param max_try: default =1, maximum try for each cross-validation (Not recommended, this forces the calc times)
+        :return:
+        """
+        # TODO Estimate with no split (only 1 group)  case
+        logger.info('START estimated_tree_component_count_many_one_component')
+        if dataset.class_number > 2:
+            raise SelfException.UnSupportMethod('Only supports binary classification')
+        try:
+            max_f1 = -1
+            best_component = 1
+            skf = model_selection.StratifiedKFold(n_splits=self.component_estimate_nfold, shuffle=True, random_state=0)
+            for component_number in range(2, self.component_search_threshold):
+                avg_f1 = 0
+                try_count = 0
+                for train_index, test_index in skf.split(dataset.train_xl, dataset.train_yl):
+                    try_count += 1
+                    if try_count > max_try: break
+                    # generate testcase
+                    testcase_data = SslDataset(dataset)
+                    testcase_data.train_xl = dataset.train_xl[train_index]
+                    testcase_data.train_yl = dataset.train_yl[train_index]
+                    testcase_data.train_labeled_number = len(train_index)
+                    testcase_data.test_x = dataset.train_xl[test_index]
+                    testcase_data.test_y = dataset.train_yl[test_index]
+                    testcase_data.test_number = len(test_index)
+
+                    # build hierarchy tree
+                    # NOTICE that this only for specific case of binary class when we only assert tree on label '1'
+                    tree = AgglomerativeTree(testcase_data, metric=self.distance_metric)
+                    hierarchy_scheme = tree.build_hierarchy_scheme_binary_class()
+                    # get list id data for each class
+                    component_assignment_label0 = hierarchy_scheme[0].element_id_list
+                    component_assignment_label1 = hierarchy_scheme[1].element_id_list
+                    # get the splitters to reconstruct the tree
+                    # the reconstruction starts from splitter has the last order (highest order value)
+                    splitter_scheme_label1 = sorted(hierarchy_scheme[1].splitter_list, key=lambda x: x.order, reverse=True)
+
+                    # start to reconstruct tree into specific number of components
+                    extract_count = 0
+                    split_id_list = []
+                    # create split id list
+                    for split in splitter_scheme_label1:
+                        # if data has less than component_number instances. The most component will be extracted
+                        extract_count += 1
+                        if extract_count > component_number: break
+                        split_id_list.append(split.cut_id)
+
+                    # Slice component_list by split_id_list
+                    slice_range = np.insert(sorted(split_id_list), len(split_id_list),
+                                            len(component_assignment_label1)-1)
+                    u = 0
+                    component_assignment_label1_sliced = []
+                    for v in slice_range:
+                        component_assignment_label1_sliced.append(component_assignment_label1[u:v+1])
+                        u = v + 1
+                    selected_component_count = np.asarray([1, len(component_assignment_label1_sliced)])
+                    selected_component_assignment = [[component_assignment_label0], component_assignment_label1_sliced]
+                    # initialize model
+                    if selected_model == 'EM':
+                        model = MultinomialManyToOneEM(testcase_data,
+                                                       component_count_list=selected_component_count,
+                                                       component_assignment_list=selected_component_assignment,
+                                                       epsilon=self.component_search_epsilon)
+                    elif selected_model == 'NB':
+                        model = MultinomialManyToOneNB(testcase_data,
+                                                       component_count_list=selected_component_count,
+                                                       component_assignment_list=selected_component_assignment)
+                    else:
+                        raise SelfException.UnSupportMethod('Only NB or EM option is accepted')
+                    model.train()
+                    model.test()
+                    avg_f1 += metrics.f1_score(model.data.test_y, model.predicted_label,
+                                               average=self.component_estimate_f1_avg)
+                if avg_f1 > max_f1:
+                    max_f1 = avg_f1
+                    best_component = component_number
+
+            # After estimated best_component, build tree on all training set
+            # and find the component split for best_component number
+            tree = AgglomerativeTree(dataset, metric=self.distance_metric)
+            hierarchy_scheme = tree.build_hierarchy_scheme_binary_class()
+            # get list id data for each class
+            component_assignment_label0 = hierarchy_scheme[0].element_id_list
+            component_assignment_label1 = hierarchy_scheme[1].element_id_list
+            # get the splitters and find the closest split with avg_split_value
+            split_id_list = []
+            extract_count = 0
+
+            # finding the upper bound
+            for split in sorted(hierarchy_scheme[1].splitter_list, key=lambda x: x.order, reverse=True):
+                extract_count += 1
+                if extract_count > best_component: break
+                split_id_list.append(split.cut_id)
+
+            # split data by split_id_list
+            slice_range = np.insert(sorted(split_id_list), len(split_id_list),
+                                    len(component_assignment_label1) - 1)
+            component_assignment_label1_sliced = []
+            u = 0
+            for v in slice_range:
+                component_assignment_label1_sliced.append(component_assignment_label1[u:v + 1])
+                u = v + 1
+
+            # assign parameter
+            selected_component_count = np.asarray([1, len(component_assignment_label1)])
+            selected_component_assignment = [[component_assignment_label0], component_assignment_label1_sliced]
+            logger.info('Number of component tree selected: ' + str(len(component_assignment_label1_sliced)))
+            return selected_component_count, selected_component_assignment
+        except BaseException:
+            logger.exception('estimated_tree_component_count_many_one_component BaseException')
             raise
 
     # II. Data grouping assumption
-    def exp_group_assumption_2a(self, unlabeled_size=4000, n_tries=5, parameter_estimate_fold=5,
-                                max_tries_parameter_estimate = 5, component_threshold=50,
-                                distance_metric='match_distance', random_seed=0, epsilon=1e-4):
+    def exp_group_assumption_2a(self, unlabeled_size=5000, n_tries=5, random_seed=0,
+                                epsilon=1e-4, tree_search='cut_value'):
         """
         Experiment proceduce:
         1. Test with fix large amount of unlabeled data, with small amount of labeled data
@@ -1545,18 +1675,18 @@ class Reuters21578Evaluation(object):
         The process will perform the algorithm and return the result file in the same folder of each test case.
         :param unlabeled_size: int, default=5000, size of unlabeled data
         :param n_tries: int, default=5, number of re-train times
-        :param parameter_estimate_fold: positive int, default=5,
-                                            number of fold use for parameter estimate(group speading) at each try
-        :param max_tries_parameter_estimate: int, default 5, maximum number of tries run when estimate parameter
-        :param component_threshold: maximum number of groups search when estimate papameter
-        :param distance_metric: type of distance method using for building tree
         :param random_seed: int, default=0, seed of random generator
         :param epsilon: default 1e-4, MLE convergence threshold for EM based algorithm
+        :param tree_search: 'cut_value' or 'component_count',
+                            default 'cut_value', search method for tree component assignment
         :return:
         """
         logger.info('Start Evaluation - exp_group_assumption_2a')
         logger.info('unlabeled_size: ' + str(unlabeled_size))
         sub_folder_list = self.sub_folder_list_2a
+        if tree_search not in ['cut_value', 'component_count']:
+            raise SelfException.UnSupportMethod('tree_search only accept cut_value or component_count')
+
         # FIXME Add more algorithm here
         nb1_result_filename = 'NB1_2a_result.log'
         nb2_result_filename = 'NB2_2a_result.log'
@@ -1648,9 +1778,7 @@ class Reuters21578Evaluation(object):
                             logger.info('START: Naive Bayes 2 (random many-to-one)')
                             estimated_component = self.estimated_random_many_one_component(
                                 testcase_data, selected_model='NB',
-                                n_folds=parameter_estimate_fold,
-                                max_try=max_tries_parameter_estimate,
-                                component_threshold=component_threshold)
+                                max_try=self.max_tries_parameter_estimate)
                             nb2_model = MultinomialManyToOneNB(testcase_data, component_count_list=estimated_component)
                             nb2_model.train()
                             nb2_model.test()
@@ -1670,9 +1798,7 @@ class Reuters21578Evaluation(object):
                             logger.info('START: EM 2 (random many-to-one)')
                             estimated_component = self.estimated_random_many_one_component(
                                 testcase_data, selected_model='EM',
-                                n_folds=parameter_estimate_fold,
-                                max_try=max_tries_parameter_estimate,
-                                component_threshold=component_threshold)
+                                max_try=self.max_tries_parameter_estimate)
                             em2_model = MultinomialManyToOneEM(testcase_data, epsilon=epsilon,
                                                                component_count_list=estimated_component)
                             em2_model.train()
@@ -1692,13 +1818,17 @@ class Reuters21578Evaluation(object):
 
                             # Test NB 3
                             logger.info('START: Naive Bayes 3 (hierarchy tree many-to-one)')
-                            estimated_component_count, estimated_component_assignment = \
-                                self.estimated_tree_many_one_component(
-                                    testcase_data, selected_model='NB',
-                                    n_folds=parameter_estimate_fold,
-                                    max_try=max_tries_parameter_estimate,
-                                    component_threshold=component_threshold,
-                                    distance_metric=distance_metric)
+                            if tree_search == 'cut_value':
+                                estimated_component_count, estimated_component_assignment = \
+                                    self.estimated_tree_cut_value_many_one_component(
+                                        testcase_data, selected_model='NB',
+                                        max_try=self.max_tries_parameter_estimate)
+                            else:
+                                estimated_component_count, estimated_component_assignment = \
+                                    self.estimated_tree_component_count_many_one_component(
+                                        testcase_data, selected_model='NB',
+                                        max_try=self.max_tries_parameter_estimate)
+
                             nb3_model = MultinomialManyToOneNB(testcase_data,
                                                                component_count_list=estimated_component_count,
                                                                component_assignment_list=estimated_component_assignment)
@@ -1718,13 +1848,17 @@ class Reuters21578Evaluation(object):
 
                             # Test EM 3
                             logger.info('START: EM 3 (hierarchy tree many-to-one)')
-                            estimated_component_count, estimated_component_assignment = \
-                                self.estimated_tree_many_one_component(
-                                    testcase_data, selected_model='EM',
-                                    n_folds=parameter_estimate_fold,
-                                    max_try=max_tries_parameter_estimate,
-                                    component_threshold=component_threshold,
-                                    distance_metric=distance_metric)
+                            if tree_search == 'cut_value':
+                                estimated_component_count, estimated_component_assignment = \
+                                    self.estimated_tree_cut_value_many_one_component(
+                                        testcase_data, selected_model='EM',
+                                        max_try=self.max_tries_parameter_estimate)
+                            else:
+                                estimated_component_count, estimated_component_assignment = \
+                                    self.estimated_tree_component_count_many_one_component(
+                                        testcase_data, selected_model='EM',
+                                        max_try=self.max_tries_parameter_estimate)
+
                             em3_model = MultinomialManyToOneEM(testcase_data, epsilon=epsilon,
                                                                component_count_list=estimated_component_count,
                                                                component_assignment_list=estimated_component_assignment)
@@ -1797,8 +1931,8 @@ class Reuters21578Evaluation(object):
 
                         # FIXME Add more algorithm here
                         self.report_avg_report(test_dir + nb1_sub_result_filename, 'AVERAGE NB1', avg_NB1_result)
-                        self.report_avg_report(test_dir + nb2_sub_result_filename, 'AVERAGE NB2', avg_NB1_result)
-                        self.report_avg_report(test_dir + nb3_sub_result_filename, 'AVERAGE NB3', avg_NB1_result)
+                        self.report_avg_report(test_dir + nb2_sub_result_filename, 'AVERAGE NB2', avg_NB2_result)
+                        self.report_avg_report(test_dir + nb3_sub_result_filename, 'AVERAGE NB3', avg_NB3_result)
                         self.report_avg_report(test_dir + em1_sub_result_filename, 'AVERAGE EM1', avg_EM1_result)
                         self.report_avg_report(test_dir + em2_sub_result_filename, 'AVERAGE EM2', avg_EM2_result)
                         self.report_avg_report(test_dir + em3_sub_result_filename, 'AVERAGE EM3', avg_EM3_result)
@@ -1815,13 +1949,16 @@ def main():
         # evaluation.exp_cooperate_unlabeled_1b(epsilon=1e-3)
 
         # Test II
-        evaluation = Reuters21578Evaluation()
-        # (self, unlabeled_size=4000, n_tries=5,
-        # parameter_estimate_fold=5, max_tries_parameter_estimate = 5,
-        # component_threshold=50, random_seed=0, epsilon=1e-4)
-        evaluation.exp_group_assumption_2a(unlabeled_size=5000, n_tries=5,
-                                           parameter_estimate_fold=5, max_tries_parameter_estimate=5,
-                                           distance_metric='match_distance', component_threshold=40,epsilon=1e-1)
+        # __init__(self, component_search_threshold = 50, component_estimate_nfold=5, max_tries_parameter_estimate=5,
+        #                  distance_metric='match_distance', component_search_epsilon=1e-4,
+        #                  component_estimate_f1_avg='binary'):
+        evaluation = Reuters21578Evaluation(component_search_threshold=50, component_estimate_nfold=5,
+                                            max_tries_parameter_estimate=5, distance_metric='match_distance',
+                                            component_search_epsilon=1e-1, component_estimate_f1_avg='macro')
+
+        # exp_group_assumption_2a(self, unlabeled_size=5000, n_tries=5, random_seed=0,
+        #                                 epsilon=1e-4, tree_search='cut_value')
+        evaluation.exp_group_assumption_2a(unlabeled_size=5000, n_tries=5, epsilon=1e-1, tree_search='component_count')
         logger.info('Done!')
     except BaseException:
         logger.exception('main() BaseException')
