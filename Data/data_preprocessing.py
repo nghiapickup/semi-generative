@@ -251,14 +251,16 @@ class Preprocessing20News(object):
         # for test case
         return class_pr, occurrence_pr, vocabulary_occurrences_by_class_pr, word_mi_rank
 
-    def news_data_mi_selection_process(self, selected_word_number=300,
-                                       scale_type='l1', scale_length=-1, extract_to_file=False):
+    def news_data_mi_selection_process(self, selected_word_number=300, scale_type='l1', scale_length=-1,
+                                       binary_class=-1, extract_to_file=False):
         """
         Tokenize 20news data, only stemming, and choosing top selected_word_number with highest mutual information score.
         the data using here is by-date version and is splitted in train-test as .6-.4
         :param selected_word_number: number of features selected
         :param scale_type: l1 or l2
         :param scale_length: default length of scaling for data, default is -1: no scale
+        :param binary_class: Class label (couont form 0) uses for binary transfrom.
+                             This class label is change to 0, other is labeled 1
         :param extract_to_file: bool, flag to raise extract processed data to files, default is true
         """
         # read data
@@ -323,14 +325,22 @@ class Preprocessing20News(object):
             # a = (a.T * scale / a.sum(axis=1)).T
             # omit the label a.T[:-1].T before calculating
             if scale_length > 0:
-                if scale_type =='l1':
+                if scale_type == 'l1':
                     train_data.T[:-1] = train_data.T[:-1] * scale_length / train_data.T[:-1].sum(axis=0)
                     test_data.T[:-1] = test_data.T[:-1] * scale_length / test_data.T[:-1].sum(axis=0)
-                elif scale_type =='l2':
+                elif scale_type == 'l2':
                     train_data.T[:-1] = train_data.T[:-1] * scale_length / np.sqrt((train_data.T[:-1]**2).sum(axis=0))
                     test_data.T[:-1] = test_data.T[:-1] * scale_length / np.sqrt((test_data.T[:-1]**2).sum(axis=0))
                 else:
                     raise SelfException.UnSupportMethod(str(scale_type) + ' is not supported')
+
+            # Binary classification transform
+            if binary_class > -1:
+                map_load = np.arange(2)
+                for i in range(len(train_data)):
+                    train_data[i,-1] = 0 if train_data[i,-1] == binary_class else 1
+                for i in range(len(test_data)):
+                    test_data[i,-1] = 0 if test_data[i,-1] == binary_class else 1
 
             # extract to files
             if extract_to_file:
@@ -346,74 +356,85 @@ class Preprocessing20News(object):
 
 def main():
     try:
-        cmd_list_test = ['1a_test',
-                         'news_data_mi_selection_process 100 1 extract_to_file=True',
-                         'news_data_mi_selection_process 200 -1 extract_to_file=True']
-
         cmd_export_mi_list = ['', 'mutual_information_export']
 
         # [EXP]
         # 1.a. scale and no scale, with vary features number
         cmd_1a_scale = ['1a_scale',
-                        'news_data_mi_selection_process 100 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 200 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 400 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 600 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 1000 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 5000 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 7000 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 10000 10000 l1 extract_to_file=True']
+                        'news_data_mi_selection_process 100 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 200 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 400 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 600 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 1000 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 5000 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 7000 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 10000 10000 l1 -1 extract_to_file=True']
         cmd_1a_no_scale = ['1a_no_scale',
-                           'news_data_mi_selection_process 100 -1 l1  extract_to_file=True',
-                           'news_data_mi_selection_process 200 -1 l1 extract_to_file=True',
-                           'news_data_mi_selection_process 400 -1 l1 extract_to_file=True',
-                           'news_data_mi_selection_process 600 -1 l1 extract_to_file=True',
-                           'news_data_mi_selection_process 1000 -1 l1 extract_to_file=True',
-                           'news_data_mi_selection_process 5000 -1 l1 extract_to_file=True',
-                           'news_data_mi_selection_process 7000 -1 l1 extract_to_file=True',
-                           'news_data_mi_selection_process 10000 -1 l1 extract_to_file=True']
+                           'news_data_mi_selection_process 100 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 200 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 400 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 600 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 1000 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 5000 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 7000 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 10000 -1 l1 -1 extract_to_file=True']
 
-        # 1.b. 400 features, scale length 5s
+        # 1.b. 400 features, scale length 10000
         cmd_1b_400_scale = ['1b_scale',
-                            'news_data_mi_selection_process 400 10000 extract_to_file=True']
+                            'news_data_mi_selection_process 400 10000 l1 -1 extract_to_file=True']
         cmd_1b_400_no_scale = ['1b_no_scale',
-                            'news_data_mi_selection_process 400 -1 extract_to_file=True']
+                            'news_data_mi_selection_process 400 -1 l1 -1 extract_to_file=True']
 
         cmd_2a_scale_origin = ['2a',
-                           'news_data_mi_selection_process 400 10000 extract_to_file=True']
+                           'news_data_mi_selection_process 400 10000 l1 -1 extract_to_file=True']
 
         # 1.c. scale_l1 and scale_l2 and no scale, with vary features number
         cmd_1c_scale_l1 = ['1c_scale_l1',
-                        'news_data_mi_selection_process 100 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 200 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 400 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 600 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 1000 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 5000 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 7000 10000 l1 extract_to_file=True',
-                        'news_data_mi_selection_process 10000 10000 l1 extract_to_file=True']
+                        'news_data_mi_selection_process 100 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 200 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 400 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 600 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 1000 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 5000 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 7000 10000 l1 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 10000 10000 l1 -1 extract_to_file=True']
         cmd_1c_scale_l2 = ['1c_scale_l2',
-                        'news_data_mi_selection_process 100 10000 l2 extract_to_file=True',
-                        'news_data_mi_selection_process 200 10000 l2 extract_to_file=True',
-                        'news_data_mi_selection_process 400 10000 l2 extract_to_file=True',
-                        'news_data_mi_selection_process 600 10000 l2 extract_to_file=True',
-                        'news_data_mi_selection_process 1000 10000 l2 extract_to_file=True',
-                        'news_data_mi_selection_process 5000 10000 l2 extract_to_file=True',
-                        'news_data_mi_selection_process 7000 10000 l2 extract_to_file=True',
-                        'news_data_mi_selection_process 10000 10000 l2 extract_to_file=True']
+                        'news_data_mi_selection_process 100 10000 l2 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 200 10000 l2 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 400 10000 l2 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 600 10000 l2 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 1000 10000 l2 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 5000 10000 l2 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 7000 10000 l2 -1 extract_to_file=True',
+                        'news_data_mi_selection_process 10000 10000 l2 -1 extract_to_file=True']
         cmd_1c_no_scale = ['1c_no_scale',
-                           'news_data_mi_selection_process 100 -1 l1  extract_to_file=True',
-                           'news_data_mi_selection_process 200 -1 l1 extract_to_file=True',
-                           'news_data_mi_selection_process 400 -1 l1 extract_to_file=True',
-                           'news_data_mi_selection_process 600 -1 l1 extract_to_file=True',
-                           'news_data_mi_selection_process 1000 -1 l1 extract_to_file=True',
-                           'news_data_mi_selection_process 5000 -1 l1 extract_to_file=True',
-                           'news_data_mi_selection_process 7000 -1 l1 extract_to_file=True',
-                           'news_data_mi_selection_process 10000 -1 l1 extract_to_file=True']
+                           'news_data_mi_selection_process 100 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 200 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 400 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 600 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 1000 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 5000 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 7000 -1 l1 -1 extract_to_file=True',
+                           'news_data_mi_selection_process 10000 -1 l1 -1 extract_to_file=True']
+
+        # 2.b. 800 features, scale length 10000
+        # The most fequent list (count from 0) [10 15 8 9 11]
+        cmd_1b_800_scale_l1 = ['2b_800_l1',
+                               'news_data_mi_selection_process 800 10000 l1 10 extract_to_file=True',
+                               'news_data_mi_selection_process 800 10000 l1 15 extract_to_file=True',
+                               'news_data_mi_selection_process 800 10000 l1 8 extract_to_file=True',
+                               'news_data_mi_selection_process 800 10000 l1 9 extract_to_file=True',
+                               'news_data_mi_selection_process 800 10000 l1 11 extract_to_file=True']
+        cmd_1b_800_scale_l2 = ['2b_800_l2',
+                               'news_data_mi_selection_process 800 10000 l2 10 extract_to_file=True',
+                               'news_data_mi_selection_process 800 10000 l2 15 extract_to_file=True',
+                               'news_data_mi_selection_process 800 10000 l2 8 extract_to_file=True',
+                               'news_data_mi_selection_process 800 10000 l2 9 extract_to_file=True',
+                               'news_data_mi_selection_process 800 10000 l2 11 extract_to_file=True']
 
         # list of cmd, with the first element is sub-folder name. This will be the sub dir of default dir.
         # FIXME alter here
-        cmd_list = cmd_1c_scale_l2
+        cmd_list = cmd_1c_scale_l1
         # only accept cmd called function from this list
         list_accepted_function = 'news_data_basic_process mutual_information_export ' \
                                  'news_data_mi_selection_process'.split()
@@ -441,7 +462,7 @@ def main():
                 function_called()
             elif cmd[0] == 'news_data_mi_selection_process':
                 function_called(selected_word_number=int(cmd[1]), scale_length=int(cmd[2]),
-                                scale_type=str(cmd[3]), extract_to_file=bool(cmd[4]))
+                                scale_type=str(cmd[3]), binary_class=int(cmd[4]), extract_to_file=bool(cmd[5]))
 
         print('Done!')
         logger.info('Done!')
