@@ -1403,7 +1403,7 @@ class NewsEvaluationTest(unittest.TestCase):
         self.assertFalse(exception_raise, 'test_exp_cooperate_unlabeled_1b: Exception raised!')
 
 
-class Reuters21578EvaluationTest(unittest.TestCase):
+class BinaryManytoOneEvaluationTest(unittest.TestCase):
     __doc__ = 'This test mostly only create test data and no exception is raised' \
               'And you should hand check the exported folders are same as expected®'
 
@@ -1411,7 +1411,7 @@ class Reuters21578EvaluationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        logger.info('START Reuters21578EvaluationTest')
+        logger.info('START BinaryManytoOneEvaluationTest')
         cls.sub_folder_2a = ['2a_reuters_test_scale_3/']
 
     def test_exp_group_assumption_2a(self):
@@ -1446,7 +1446,7 @@ class Reuters21578EvaluationTest(unittest.TestCase):
             # __init__(self, component_search_threshold=50, component_estimate_nfold=5, max_tries_parameter_estimate=5,
             #          distance_metric='match_distance', component_search_epsilon=1e-4,
             #          component_estimate_f1_avg='binary')
-            evaluation = nb.Reuters21578Evaluation(component_search_threshold=5, component_estimate_nfold=3,
+            evaluation = nb.BinaryManytoOneEvaluation(component_search_threshold=5, component_estimate_nfold=3,
                                                    max_tries_parameter_estimate=3, component_search_epsilon=1e-1,
                                                    component_estimate_f1_avg='binary')
             evaluation.default_dir = 'MMM/test_data/'
@@ -1457,7 +1457,7 @@ class Reuters21578EvaluationTest(unittest.TestCase):
             evaluation.exp_group_assumption_2a(unlabeled_size=40, n_tries=3, epsilon=1e-1, tree_search='cut_value')
 
             # test 2
-            evaluation = nb.Reuters21578Evaluation(component_search_threshold=5, component_estimate_nfold=3,
+            evaluation = nb.BinaryManytoOneEvaluation(component_search_threshold=5, component_estimate_nfold=3,
                                                    max_tries_parameter_estimate=3, component_search_epsilon=1e-1,
                                                    component_estimate_f1_avg='macro')
             evaluation.default_dir = 'MMM/test_data/'
@@ -1488,7 +1488,7 @@ def main():
 
     data_preprocessing_test = [Preprocessing20NewsTest, origin_20news_splitter_test, origin_reuters21578_splitter_test]
 
-    evaluation_test = [NewsEvaluationTest, Reuters21578EvaluationTest]
+    evaluation_test = [NewsEvaluationTest, BinaryManytoOneEvaluationTest]
 
     temp_test = []
 

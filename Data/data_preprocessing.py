@@ -2,6 +2,7 @@
 # data format can be retrieved in readme
 #
 # This code is a mess stuff !!!
+# scripts for preprocessing & export 20news bydate-dataset
 #
 # @author: nghianh | Yamada lab
 
@@ -16,131 +17,6 @@ import logging
 logger = logging.getLogger('data_preprocessing')
 SelfException.LogHandler('data_preprocessing')
 
-
-class PreprocessingSample(object):
-    __doc__ = 'Data preprocessing or Iris and Abalone data'
-
-    def __init__(self):
-        # constant
-        self.test_size = 0.3
-        self.train_unlabeled_size = 0.9
-
-        # Iris data
-        # input
-        self.iris_data_file = 'Iris/iris.data.txt'
-        self.iris_map_file = 'Iris/iris.class.txt'
-        # output
-        self.iris_output_map = 'Iris/final/iris.map.csv'
-        self.iris_output_train = ['Iris/final/iris.train.label.csv', 'Iris/final/iris.train.unlabel.csv']
-        self.iris_output_test = 'Iris/final/iris.test.csv'
-
-        # Abalone data
-        # input
-        self.abalone_data_file = 'abalone/abalone.data'
-        self.abalone_map_file = 'abalone/abalone.map'
-        # output
-        self.abalone_output_map = 'abalone.map.csv'
-        self.abalone_output_train = ['abalone.train.label.csv', 'abalone.train.unlabeled.csv']
-        self.abalone_output_test = 'abalone.test.csv'
-
-    def IrisData(self, args):
-        # init splitting size
-        if (len(args) > 1):
-            self.test_size = float(args[1])
-        if (len(args) > 2):
-            self.train_unlabeled_size = float(args[2])
-
-        # read data
-        data_load = np.loadtxt(self.iris_data_file, dtype='str', delimiter=',')
-        map_load = np.genfromtxt(self.iris_map_file, dtype='str', delimiter=',')
-
-        # re-index class to number 0, 1, ..., c
-        index_map = {}
-        for i in range(len(map_load)):
-            index_map[map_load[i]] = i
-
-        for i, d in enumerate(data_load):
-            d[-1] = index_map.get(d[-1])
-
-        # split data into 3 parts, nearly same proportion
-        # first slpit train and test, then from train split to label and unlabel
-        sss1 = model_selection.StratifiedShuffleSplit(n_splits=1, test_size=self.test_size, random_state=0)
-        train_indices = [] #just in case
-        for train_indices, test_indices in sss1.split(data_load, data_load.T[-1]):
-            np.savetxt(self.iris_output_test, data_load[test_indices], fmt="%s", delimiter=',')  # test first
-        #
-        if self.train_unlabeled_size == 0:
-            np.savetxt(self.iris_output_train[0],data_load[train_indices], fmt='%s', delimiter=',') # only train
-        else:
-            sss2 = model_selection.StratifiedShuffleSplit(n_splits=1, test_size=self.train_unlabeled_size, random_state=0)
-            for train_label_indices, train_unlabel_indices in sss2.split(data_load[train_indices],
-                                                                         data_load[train_indices].T[-1]):
-                np.savetxt(self.iris_output_train[0], data_load[train_indices][train_label_indices], fmt='%s',
-                           delimiter=',')
-                np.savetxt(self.iris_output_train[1], data_load[train_indices][train_unlabel_indices], fmt='%s',
-                           delimiter=',')
-
-        # map file generate
-        np.savetxt(self.iris_output_map, np.mat(map_load)[0], fmt="%s", delimiter=',')
-
-    def AbaloneData(self, args, split_number=1):
-        # Only extract data class from class 5 to 15
-        # init splitting size
-        if (len(args) > 1):
-            self.test_size = float(args[1])
-        if (len(args) > 2):
-            self.train_unlabeled_size = float(args[2])
-
-        # read data
-        data_load = np.loadtxt(self.abalone_data_file, dtype='str', delimiter=',')
-        map_load = np.genfromtxt(self.abalone_map_file, dtype='str', delimiter=',')
-
-        # re-index class to number 0, 1, ..., c
-        index_map = {}
-        for i in range(len(map_load)):
-            index_map[map_load[i]] = i
-
-        # remove data out of range
-        indices = [i for (i, d) in enumerate(data_load) if index_map.get(d[-1]) == None]
-        data_load = np.delete(data_load, indices, axis=0)
-
-        for i, d in enumerate(data_load):
-            d[-1] = index_map.get(d[-1])
-
-        # convert sex column to numeric
-        u, indices = np.unique((data_load.T)[0], return_inverse  = True)
-        (data_load.T)[0] = indices
-
-        # split data into 3 parts, nearly same proportion
-        # first slpit train and test, then from train split to label and unlabel
-        sss1 = model_selection.StratifiedShuffleSplit(n_splits=split_number, test_size=self.test_size, random_state=0)
-        train_indices = [] #just in case
-
-        split_count = 0
-        for train_indices, test_indices in sss1.split(data_load, data_load.T[-1]):
-            partial_folder_name = 'abalone/' + str(split_count) + '/'
-            os.makedirs(partial_folder_name , exist_ok=True)
-
-            np.savetxt(partial_folder_name + self.abalone_output_test,
-                       data_load[test_indices], fmt="%s", delimiter=',')  # test first
-            #
-            if self.train_unlabeled_size == 0:
-                np.savetxt(partial_folder_name + self.abalone_output_train[0],data_load[train_indices], fmt='%s', delimiter=',') # only train
-            else:
-                sss2 = model_selection.StratifiedShuffleSplit(n_splits=1, test_size=self.train_unlabeled_size, random_state=0)
-                for train_label_indices, train_unlabel_indices in sss2.split(data_load[train_indices],
-                                                                             data_load[train_indices].T[-1]):
-                    np.savetxt(partial_folder_name + self.abalone_output_train[0], data_load[train_indices][train_label_indices], fmt='%s',
-                               delimiter=',')
-                    np.savetxt(partial_folder_name + self.abalone_output_train[1], data_load[train_indices][train_unlabel_indices], fmt='%s',
-                               delimiter=',')
-
-            # map file generate
-            np.savetxt(partial_folder_name + self.abalone_output_map, np.mat(map_load)[0], fmt="%s", delimiter=',')
-
-            split_count += 1
-
-
 file_location_list = collections.namedtuple('file_location_list', 'vocabulary_file, map_input, '
                                                                   'train_input, train_label_input, '
                                                                   'test_input, test_label_input, '
@@ -148,7 +24,7 @@ file_location_list = collections.namedtuple('file_location_list', 'vocabulary_fi
 
 
 class Preprocessing20News(object):
-    __doc__ = '20News data pre-processing.'
+    __doc__ = '20News data pre-processing using 20news-bydate'
 
     reuters_stop_word_file = 'reuters_wos.txt'
     mi_word_rank_file = '20news-bydate/mi_word_rank.txt'
@@ -375,11 +251,13 @@ class Preprocessing20News(object):
         # for test case
         return class_pr, occurrence_pr, vocabulary_occurrences_by_class_pr, word_mi_rank
 
-    def news_data_mi_selection_process(self, selected_word_number=300, scale_length=-1, extract_to_file=False):
+    def news_data_mi_selection_process(self, selected_word_number=300,
+                                       scale_type='l1', scale_length=-1, extract_to_file=False):
         """
         Tokenize 20news data, only stemming, and choosing top selected_word_number with highest mutual information score.
         the data using here is by-date version and is splitted in train-test as .6-.4
         :param selected_word_number: number of features selected
+        :param scale_type: l1 or l2
         :param scale_length: default length of scaling for data, default is -1: no scale
         :param extract_to_file: bool, flag to raise extract processed data to files, default is true
         """
@@ -426,39 +304,45 @@ class Preprocessing20News(object):
                     raise IOError('Test file: line ', i, ' error')
                 test_data[int(tup[0]) - 1, int(tup[1]) - 1] = tup[2]
             test_data[:, -1] = test_label_load[:]
+
+            # only pick data in mi rank list
+            # TODO: exception when selected_word_number > vocabulary size
+            pick_id = mi_rank_list_load[:selected_word_number]
+            pick_id = np.append(pick_id, -1) # add document label
+            # noting here the order of word is now follow the MI rank list
+            train_data = train_data.T[pick_id].T
+            test_data = test_data.T[pick_id].T
+
+            # remove all zero vector
+            train_zero_vector_list = [counter for counter, value in enumerate(train_data.T[:-1].sum(axis=0)) if value==0]
+            test_zero_vector_list = [counter for counter, value in enumerate(test_data.T[:-1].sum(axis=0)) if value==0]
+            train_data = np.delete(train_data, train_zero_vector_list, axis=0)
+            test_data = np.delete(test_data, test_zero_vector_list, axis=0)
+
+            # scaling data with fix length,scale must must be done after pick data from MI rank list
+            # a = (a.T * scale / a.sum(axis=1)).T
+            # omit the label a.T[:-1].T before calculating
+            if scale_length > 0:
+                if scale_type =='l1':
+                    train_data.T[:-1] = train_data.T[:-1] * scale_length / train_data.T[:-1].sum(axis=0)
+                    test_data.T[:-1] = test_data.T[:-1] * scale_length / test_data.T[:-1].sum(axis=0)
+                elif scale_type =='l2':
+                    train_data.T[:-1] = train_data.T[:-1] * scale_length / np.sqrt((train_data.T[:-1]**2).sum(axis=0))
+                    test_data.T[:-1] = test_data.T[:-1] * scale_length / np.sqrt((test_data.T[:-1]**2).sum(axis=0))
+                else:
+                    raise SelfException.UnSupportMethod(str(scale_type) + ' is not supported')
+
+            # extract to files
+            if extract_to_file:
+                self.data_csv_export(map_load, train_data, test_data)
+
+            self.loaded_map_data = map_load
+            self.loaded_train_data = train_data
+            self.loaded_test_data = test_data
+
         except BaseException:
             logger.exception('news_data_mi_selection_process BaseException')
             raise
-
-        # only pick data in mi rank list
-        # TODO: exception when selected_word_number > vocabulary size
-        pick_id = mi_rank_list_load[:selected_word_number]
-        pick_id = np.append(pick_id, -1) # add document label
-        # noting here the order of word is now follow the MI rank list
-        train_data = train_data.T[pick_id].T
-        test_data = test_data.T[pick_id].T
-
-        # remove all zero vector
-        train_zero_vector_list = [counter for counter, value in enumerate(train_data.T[:-1].sum(axis=0)) if value==0]
-        test_zero_vector_list = [counter for counter, value in enumerate(test_data.T[:-1].sum(axis=0)) if value==0]
-        train_data = np.delete(train_data, train_zero_vector_list, axis=0)
-        test_data = np.delete(test_data, test_zero_vector_list, axis=0)
-
-        # scaling data with fix length,scale must must be done after pick data from MI rank list
-        # a = (a.T * scale / a.sum(axis=1)).T
-        # We omit the label a.T[:-1].T before calculating
-        if scale_length > 0:
-            train_data.T[:-1] = train_data.T[:-1] * scale_length / train_data.T[:-1].sum(axis=0)
-            test_data.T[:-1] = test_data.T[:-1] * scale_length / test_data.T[:-1].sum(axis=0)
-
-        # extract to files
-        if extract_to_file:
-            self.data_csv_export(map_load, train_data, test_data)
-
-        self.loaded_map_data = map_load
-        self.loaded_train_data = train_data
-        self.loaded_test_data = test_data
-
 
 def main():
     try:
@@ -471,23 +355,23 @@ def main():
         # [EXP]
         # 1.a. scale and no scale, with vary features number
         cmd_1a_scale = ['1a_scale',
-                        'news_data_mi_selection_process 100 10000 extract_to_file=True',
-                        'news_data_mi_selection_process 200 10000 extract_to_file=True',
-                        'news_data_mi_selection_process 400 10000 extract_to_file=True',
-                        'news_data_mi_selection_process 600 10000 extract_to_file=True',
-                        'news_data_mi_selection_process 1000 10000 extract_to_file=True',
-                        'news_data_mi_selection_process 5000 10000 extract_to_file=True',
-                        'news_data_mi_selection_process 7000 10000 extract_to_file=True',
-                        'news_data_mi_selection_process 10000 10000 extract_to_file=True']
+                        'news_data_mi_selection_process 100 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 200 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 400 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 600 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 1000 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 5000 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 7000 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 10000 10000 l1 extract_to_file=True']
         cmd_1a_no_scale = ['1a_no_scale',
-                           'news_data_mi_selection_process 100 -1 extract_to_file=True',
-                           'news_data_mi_selection_process 200 -1 extract_to_file=True',
-                           'news_data_mi_selection_process 400 -1 extract_to_file=True',
-                           'news_data_mi_selection_process 600 -1 extract_to_file=True',
-                           'news_data_mi_selection_process 1000 -1 extract_to_file=True',
-                           'news_data_mi_selection_process 5000 -1 extract_to_file=True',
-                           'news_data_mi_selection_process 7000 -1 extract_to_file=True',
-                           'news_data_mi_selection_process 10000 -1 extract_to_file=True']
+                           'news_data_mi_selection_process 100 -1 l1  extract_to_file=True',
+                           'news_data_mi_selection_process 200 -1 l1 extract_to_file=True',
+                           'news_data_mi_selection_process 400 -1 l1 extract_to_file=True',
+                           'news_data_mi_selection_process 600 -1 l1 extract_to_file=True',
+                           'news_data_mi_selection_process 1000 -1 l1 extract_to_file=True',
+                           'news_data_mi_selection_process 5000 -1 l1 extract_to_file=True',
+                           'news_data_mi_selection_process 7000 -1 l1 extract_to_file=True',
+                           'news_data_mi_selection_process 10000 -1 l1 extract_to_file=True']
 
         # 1.b. 400 features, scale length 5s
         cmd_1b_400_scale = ['1b_scale',
@@ -498,9 +382,38 @@ def main():
         cmd_2a_scale_origin = ['2a',
                            'news_data_mi_selection_process 400 10000 extract_to_file=True']
 
+        # 1.c. scale_l1 and scale_l2 and no scale, with vary features number
+        cmd_1c_scale_l1 = ['1c_scale_l1',
+                        'news_data_mi_selection_process 100 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 200 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 400 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 600 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 1000 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 5000 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 7000 10000 l1 extract_to_file=True',
+                        'news_data_mi_selection_process 10000 10000 l1 extract_to_file=True']
+        cmd_1c_scale_l2 = ['1c_scale_l2',
+                        'news_data_mi_selection_process 100 10000 l2 extract_to_file=True',
+                        'news_data_mi_selection_process 200 10000 l2 extract_to_file=True',
+                        'news_data_mi_selection_process 400 10000 l2 extract_to_file=True',
+                        'news_data_mi_selection_process 600 10000 l2 extract_to_file=True',
+                        'news_data_mi_selection_process 1000 10000 l2 extract_to_file=True',
+                        'news_data_mi_selection_process 5000 10000 l2 extract_to_file=True',
+                        'news_data_mi_selection_process 7000 10000 l2 extract_to_file=True',
+                        'news_data_mi_selection_process 10000 10000 l2 extract_to_file=True']
+        cmd_1c_no_scale = ['1c_no_scale',
+                           'news_data_mi_selection_process 100 -1 l1  extract_to_file=True',
+                           'news_data_mi_selection_process 200 -1 l1 extract_to_file=True',
+                           'news_data_mi_selection_process 400 -1 l1 extract_to_file=True',
+                           'news_data_mi_selection_process 600 -1 l1 extract_to_file=True',
+                           'news_data_mi_selection_process 1000 -1 l1 extract_to_file=True',
+                           'news_data_mi_selection_process 5000 -1 l1 extract_to_file=True',
+                           'news_data_mi_selection_process 7000 -1 l1 extract_to_file=True',
+                           'news_data_mi_selection_process 10000 -1 l1 extract_to_file=True']
+
         # list of cmd, with the first element is sub-folder name. This will be the sub dir of default dir.
         # FIXME alter here
-        cmd_list = cmd_2a_scale_origin
+        cmd_list = cmd_1c_scale_l2
         # only accept cmd called function from this list
         list_accepted_function = 'news_data_basic_process mutual_information_export ' \
                                  'news_data_mi_selection_process'.split()
@@ -527,7 +440,8 @@ def main():
             elif cmd[0] == 'mutual_information_export':
                 function_called()
             elif cmd[0] == 'news_data_mi_selection_process':
-                function_called(selected_word_number=int(cmd[1]), scale_length=int(cmd[2]),extract_to_file=bool(cmd[3]))
+                function_called(selected_word_number=int(cmd[1]), scale_length=int(cmd[2]),
+                                scale_type=str(cmd[3]), extract_to_file=bool(cmd[4]))
 
         print('Done!')
         logger.info('Done!')

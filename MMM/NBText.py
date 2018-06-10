@@ -961,6 +961,9 @@ class NewsEvaluation(object):
         self.sub_folder_list_1b = '1b_scale 1b_no_scale'.split()
         self.approximate_labeled_sizes_1b = np.array([100, 200, 500, 700, 1000, 1500, 2000, 2500, 3000, 4000])
 
+        # exp_feature_selection_1c
+        self.sub_folder_list_1c = '1c_no_scale 1c_scale_l1 1c_scale_l2'.split()
+
     def report_export(self, model, file_name, extend_file=False, detail_return=False):
         """
         Export report
@@ -1256,8 +1259,80 @@ class NewsEvaluation(object):
             logger.exception('exp_cooperate_unlabeled_1b BaseException')
             raise
 
+    def exp_feature_selection_1c(self, n_splits=5, random_seed=0):
+        """
+        Exp Model
+        NB and EM with 2 types of data: scaling l1 and l2 and non-scaling
+        in corresponding with difference number of selected word features.
 
-class Reuters21578Evaluation(object):
+        Data Reading:
+        The func will scan default_dir location and process through all sub-folder in sub_folder_list (one-by-one).
+        In each sub-folder contains all test cases for one exp.
+        The process will perform the algorithm and return the result file in the same folder of each test case.
+
+        :param n_splits: number of split fold for train labeled data
+        :param random_seed: default = 0, random seed
+        :return:
+        """
+        logger.info('Start Evaluation - exp_feature_selection_1c - all labeled data')
+        logger.info('n_splits: ' + str(n_splits))
+        sub_folder_list = self.sub_folder_list_1c
+        nb_result_filename = 'NB_1c_result.log'
+        try:
+            # this default exp uses unlabeled_size data as unlabeled data,
+            # the remaining is split into n_splits non-overlap parts with size 1000
+            for sub_folder in sub_folder_list:
+                # get all tests in sub-folder
+                test_folder_list = next(os.walk(self.default_dir + sub_folder + '/'))[1]
+                for test_folder in test_folder_list:
+                    test_dir = self.default_dir + sub_folder + '/' + test_folder + '/'
+                    logger.info('START TEST: ' + test_dir)
+                    origin_data = Dataset()
+                    origin_data.load_from_csv([test_dir + self.map_filename,
+                                        test_dir + self.train_filename, test_dir + self.test_filename])
+                    skf = model_selection.StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+
+                    # split train data into 5 overlap parts and get the average
+                    avg_NB_result = None
+                    for _, testcase_train_index in skf.split(origin_data.train_x, origin_data.train_y):
+                        # TODO Check the copied elements
+                        testcase_data = Dataset(origin_data)
+                        testcase_data.train_x = origin_data.train_x[testcase_train_index]
+                        testcase_data.train_y = origin_data.train_y[testcase_train_index]
+                        testcase_data.train_labeled_number = len(testcase_train_index)
+
+                        # Test Naive Bayes
+                        logger.info('START: Naive Bayes')
+                        nb_model = MultinomialNB(testcase_data)
+                        nb_model.train()
+                        nb_model.test()
+                        temp_result = self.report_export(nb_model, test_dir + nb_result_filename,
+                                                         extend_file=True, detail_return=True)
+                        if avg_NB_result is None:
+                            avg_NB_result = temp_result
+                        else:
+                            avg_NB_result.accuracy += temp_result.accuracy
+                            avg_NB_result.precision += temp_result.precision
+                            avg_NB_result.recall += temp_result.recall
+                            avg_NB_result.f1 += temp_result.f1
+                            avg_NB_result.support += temp_result.support
+                        logger.info('DONE: Naive Bayes')
+                    # compute average values
+                    avg_NB_result.accuracy, avg_NB_result.precision, \
+                    avg_NB_result.recall, avg_NB_result.f1, avg_NB_result.support = \
+                        np.divide(avg_NB_result.accuracy, n_splits), \
+                        np.divide(avg_NB_result.precision, n_splits), \
+                        np.divide(avg_NB_result.recall, n_splits), \
+                        np.divide(avg_NB_result.f1, n_splits), \
+                        np.divide(avg_NB_result.support, n_splits)
+                    self.report_avg_report(test_dir + nb_result_filename, 'AVERAGE NB', avg_NB_result)
+
+        except BaseException:
+            logger.exception('exp_feature_selection_1c BaseException')
+            raise
+
+
+class BinaryManytoOneEvaluation(object):
     __doc__ = 'Evaluation methods using Reuters21578 dataset' \
               'Data 11367' \
               'vocabulary size 28438'
@@ -1653,6 +1728,7 @@ class Reuters21578Evaluation(object):
             raise
 
     # II. Data grouping assumption
+    #2a using Reuteters dataset
     def exp_group_assumption_2a(self, unlabeled_size=5000, n_tries=5, random_seed=0,
                                 epsilon=1e-4, tree_search='cut_value'):
         """
@@ -1944,21 +2020,23 @@ class Reuters21578Evaluation(object):
 def main():
     try:
         # Test I
-        # evaluation = NewsEvaluation()
+        evaluation = NewsEvaluation()
         # evaluation.exp_feature_selection_1a(epsilon=1e-3)
         # evaluation.exp_cooperate_unlabeled_1b(epsilon=1e-3)
+        evaluation.exp_feature_selection_1c()
 
         # Test II
         # __init__(self, component_search_threshold = 50, component_estimate_nfold=5, max_tries_parameter_estimate=5,
         #                  distance_metric='match_distance', component_search_epsilon=1e-4,
         #                  component_estimate_f1_avg='binary'):
-        evaluation = Reuters21578Evaluation(component_search_threshold=50, component_estimate_nfold=5,
-                                            max_tries_parameter_estimate=5, distance_metric='match_distance',
-                                            component_search_epsilon=1e-1, component_estimate_f1_avg='macro')
+        # evaluation = BinaryManytoOneEvaluation(component_search_threshold=50, component_estimate_nfold=5,
+        #                                     max_tries_parameter_estimate=5, distance_metric='match_distance',
+        #                                     component_search_epsilon=1e-1, component_estimate_f1_avg='macro')
 
         # exp_group_assumption_2a(self, unlabeled_size=5000, n_tries=5, random_seed=0,
         #                                 epsilon=1e-4, tree_search='cut_value')
-        evaluation.exp_group_assumption_2a(unlabeled_size=5000, n_tries=5, epsilon=1e-1, tree_search='component_count')
+        # evaluation.exp_group_assumption_2a(unlabeled_size=5000, n_tries=5, epsilon=1e-1, tree_search='component_count')
+
         logger.info('Done!')
     except BaseException:
         logger.exception('main() BaseException')
